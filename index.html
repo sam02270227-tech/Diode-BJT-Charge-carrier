@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>半導體物理: 二極體與 BJT 載子動態模擬器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Tailwind slate-900 */
+            color: #f8fafc; /* Tailwind slate-50 */
+            margin: 0;
+            overflow: hidden; /* 防止滾動 */
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            z-index: 20;
+        }
+
+        .control-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .control-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .control-btn.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            border-color: #2563eb; /* blue-600 */
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* 隱藏捲軸 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        input[type=range] {
+            accent-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row relative">
+
+    <!-- 左側控制面板 -->
+    <div class="glass-panel w-full md:w-80 h-auto md:h-full flex flex-col z-20 border-r border-slate-700 p-5 overflow-y-auto shrink-0">
+        <h1 class="text-xl font-bold mb-1 text-blue-400 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">半導體物理模擬器</h1>
+        <p class="text-xs text-slate-400 mb-6">微觀載子動力學 & 能帶圖分析</p>
+
+        <!-- 元件選擇 -->
+        <div class="mb-6">
+            <h2 class="text-sm font-semibold text-slate-300 mb-2">1. 選擇元件結構</h2>
+            <div class="flex gap-2">
+                <button id="btn-diode" class="control-btn active flex-1 py-2 px-1 rounded-md bg-slate-800 border border-slate-600 text-[13px]" onclick="setDevice('diode')">二極體</button>
+                <button id="btn-npn" class="control-btn flex-1 py-2 px-1 rounded-md bg-slate-800 border border-slate-600 text-[13px]" onclick="setDevice('npn')">NPN BJT</button>
+                <button id="btn-pnp" class="control-btn flex-1 py-2 px-1 rounded-md bg-slate-800 border border-slate-600 text-[13px]" onclick="setDevice('pnp')">PNP BJT</button>
+            </div>
+        </div>
+
+        <!-- 偏壓狀態控制 -->
+        <div class="mb-6" id="bias-controls-container">
+            <h2 class="text-sm font-semibold text-slate-300 mb-2">2. 外部偏壓狀態</h2>
+            
+            <div id="diode-bias" class="grid grid-cols-1 gap-2">
+                <button id="btn-d-thermal" class="control-btn active py-2 px-3 rounded-md bg-slate-800 border border-slate-600 text-sm text-left flex justify-between" onclick="setDiodeBias('thermal')">
+                    <span>熱平衡 (0V)</span>
+                    <span class="text-slate-500">I = 0</span>
+                </button>
+                <button id="btn-d-forward" class="control-btn py-2 px-3 rounded-md bg-slate-800 border border-slate-600 text-sm text-left flex justify-between" onclick="setDiodeBias('forward')">
+                    <span class="text-emerald-400">順向偏壓 (Forward)</span>
+                    <span class="text-slate-500">I > 0</span>
+                </button>
+                <button id="btn-d-reverse" class="control-btn py-2 px-3 rounded-md bg-slate-800 border border-slate-600 text-sm text-left flex justify-between" onclick="setDiodeBias('reverse')">
+                    <span class="text-rose-400">逆向偏壓 (Reverse)</span>
+                    <span class="text-slate-500">I ≈ 0</span>
+                </button>
+            </div>
+
+            <div id="bjt-bias" class="grid grid-cols-2 gap-2 hidden">
+                <button id="btn-b-cutoff" class="control-btn active py-2 px-2 rounded-md bg-slate-800 border border-slate-600 text-xs text-center" onclick="setBjtBias('cutoff')">截止區<br>(Cut-off)</button>
+                <button id="btn-b-active" class="control-btn py-2 px-2 rounded-md bg-slate-800 border border-slate-600 text-xs text-center text-emerald-400" onclick="setBjtBias('active')">主動區<br>(Active)</button>
+                <button id="btn-b-saturation" class="control-btn py-2 px-2 rounded-md bg-slate-800 border border-slate-600 text-xs text-center text-amber-400" onclick="setBjtBias('saturation')">飽和區<br>(Saturation)</button>
+                <button id="btn-b-reverse" class="control-btn py-2 px-2 rounded-md bg-slate-800 border border-slate-600 text-xs text-center" onclick="setBjtBias('reverse-active')">反向主動<br>(Rev-Active)</button>
+            </div>
+        </div>
+
+        <!-- 物理參數 -->
+        <div class="mb-6 space-y-5">
+            <h2 class="text-sm font-semibold text-slate-300 mb-1">3. 動力學參數調整</h2>
+            
+            <!-- 速度控制 -->
+            <div>
+                <div class="flex justify-between mb-1">
+                    <label class="text-xs text-slate-400">變化累積速率 (Transition Speed)</label>
+                    <span id="speed-val" class="text-xs text-blue-300 font-mono">1.0 x</span>
+                </div>
+                <input type="range" id="slider-speed" min="0.1" max="3.0" step="0.1" value="1.0" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                <p class="text-[10px] text-slate-500 mt-1">調慢可觀察空乏區「慢慢擴張/收縮」的累積過程。</p>
+            </div>
+
+            <!-- 溫度控制 -->
+            <div>
+                <div class="flex justify-between mb-1">
+                    <label class="text-xs text-slate-400">溫度 (Temperature)</label>
+                    <span id="temp-val" class="text-xs text-blue-300 font-mono">300 K</span>
+                </div>
+                <input type="range" id="slider-temp" min="100" max="500" step="10" value="300" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                <p class="text-[10px] text-slate-500 mt-1">影響：本徵載子濃度、熱激發對、內建電勢、空乏區寬度。</p>
+            </div>
+            
+            <!-- 摻雜濃度 -->
+            <div>
+                <div class="flex justify-between mb-1">
+                    <label class="text-xs text-slate-400">摻雜濃度 (Doping Level)</label>
+                    <span id="doping-val" class="text-xs text-blue-300 font-mono">Medium</span>
+                </div>
+                <input type="range" id="slider-doping" min="1" max="3" value="2" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+            </div>
+        </div>
+
+        <!-- 狀態解析 -->
+        <div class="mt-auto bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+            <h3 class="text-xs font-bold text-slate-200 mb-1 flex items-center gap-1">
+                <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                當前狀態解析
+            </h3>
+            <p id="explanation-text" class="text-xs text-slate-300 leading-relaxed min-h-[80px]">
+                載入中...
+            </p>
+        </div>
+    </div>
+
+    <!-- 右側模擬區 -->
+    <div class="flex-1 flex flex-col h-full bg-slate-900 relative z-10 w-full overflow-hidden">
+        
+        <!-- 頂部：2D 微觀粒子模擬 -->
+        <div class="flex-1 relative w-full border-b border-slate-800 bg-[#0f172a]" id="canvas-container">
+            <canvas id="physics-canvas" class="absolute inset-0 w-full h-full"></canvas>
+            
+            <!-- 圖例 -->
+            <div class="absolute top-4 left-4 glass-panel px-3 py-2 rounded-lg pointer-events-none">
+                <h4 class="text-[10px] uppercase tracking-wider text-slate-400 mb-2 font-semibold">圖例 (Legend)</h4>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></span>電子 (e⁻)</div>
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></span>電洞 (h⁺)</div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full border border-blue-400 flex items-center justify-center text-[8px] text-blue-400">+</span>
+                        施體離子
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full border border-rose-400 flex items-center justify-center text-[8px] text-rose-400">-</span>
+                        受體離子
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部：一維能帶圖 -->
+        <div class="h-64 md:h-80 w-full relative bg-slate-900" id="band-container">
+            <h3 class="absolute top-2 left-4 text-xs font-semibold text-slate-400 z-10">能帶圖 (Energy Band Diagram)</h3>
+            <canvas id="band-canvas" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let currentDevice = 'diode';
+        let diodeBias = 'thermal';
+        let bjtBias = 'cutoff';
+        
+        // 互動參數
+        let temperature = 300;
+        let dopingLevel = 2;
+        let transitionSpeed = 1.0; 
+
+        // 動態物理參數 (用於平滑過渡動畫)
+        let currentDepW = 50; 
+        let targetDepW = 50;
+        let currentVbi = 40; 
+        let targetVbi = 40;
+        
+        // BJT 動態參數
+        let bjtBeDepW = 30; let bjtTargetBeDepW = 30;
+        let bjtBcDepW = 35; let bjtTargetBcDepW = 35;
+        let bjtVbe = 30; let bjtTargetVbe = 30;
+        let bjtVbc = 60; let bjtTargetVbc = 60;
+
+        let physicsCanvas, ctx;
+        let bandCanvas, bandCtx;
+
+        let electrons = [];
+        let holes = [];
+        let fixedIons = []; 
+        let recombinationSparks = [];
+        let wireElectrons = [];
+        
+        let animationId;
+        let lastTime = 0;
+
+        // 安全邊界 (粒子半徑，用以防止穿牆或壓線)
+        const pr = 6;
+        const pad = 12;
+
+        window.onload = function() {
+            physicsCanvas = document.getElementById('physics-canvas');
+            ctx = physicsCanvas.getContext('2d');
+            bandCanvas = document.getElementById('band-canvas');
+            bandCtx = bandCanvas.getContext('2d');
+            
+            resizeContainers();
+            
+            // 視窗縮放時，重新對齊網格並限制載子位置
+            window.addEventListener('resize', () => {
+                resizeContainers();
+                initParticles(); 
+                initWireCircuit();
+            });
+
+            // 速度控制
+            document.getElementById('slider-speed').addEventListener('input', (e) => {
+                transitionSpeed = parseFloat(e.target.value);
+                document.getElementById('speed-val').innerText = `${transitionSpeed.toFixed(1)} x`;
+            });
+
+            // 溫度控制 (引入真實物理效應)
+            document.getElementById('slider-temp').addEventListener('input', (e) => {
+                temperature = parseInt(e.target.value);
+                document.getElementById('temp-val').innerText = `${temperature} K`;
+                
+                // 1. 調整熱運動速度 (即時)
+                electrons.forEach(p => updateThermalSpeed(p));
+                holes.forEach(p => updateThermalSpeed(p));
+                
+                // 2. 溫度改變內建電勢和空乏區寬度
+                updateTargetPhysics();
+            });
+
+            // 摻雜控制
+            document.getElementById('slider-doping').addEventListener('input', (e) => {
+                dopingLevel = parseInt(e.target.value);
+                const levels = {1: 'Low', 2: 'Medium', 3: 'High'};
+                document.getElementById('doping-val').innerText = levels[dopingLevel];
+                initParticles(); 
+                updateTargetPhysics();
+            });
+
+            initParticles();
+            initWireCircuit();
+            updateExplanation();
+            
+            requestAnimationFrame(animate);
+        };
+
+        function resizeContainers() {
+            const pCont = document.getElementById('canvas-container');
+            const bCont = document.getElementById('band-container');
+            physicsCanvas.width = pCont.clientWidth;
+            physicsCanvas.height = pCont.clientHeight;
+            bandCanvas.width = bCont.clientWidth;
+            bandCanvas.height = bCont.clientHeight;
+        }
+
+        function setDevice(device) {
+            currentDevice = device;
+            document.getElementById('btn-diode').classList.toggle('active', device === 'diode');
+            document.getElementById('btn-npn').classList.toggle('active', device === 'npn');
+            document.getElementById('btn-pnp').classList.toggle('active', device === 'pnp');
+            
+            document.getElementById('diode-bias').classList.toggle('hidden', device !== 'diode');
+            document.getElementById('bjt-bias').classList.toggle('hidden', device === 'diode');
+
+            initParticles();
+            initWireCircuit();
+            updateTargetPhysics();
+            updateExplanation();
+        }
+
+        function setDiodeBias(bias) {
+            diodeBias = bias;
+            ['thermal', 'forward', 'reverse'].forEach(b => {
+                document.getElementById(`btn-d-${b}`).classList.toggle('active', bias === b);
+            });
+            updateTargetPhysics();
+            initWireCircuit();
+            updateExplanation();
+        }
+
+        function setBjtBias(bias) {
+            bjtBias = bias;
+            const idMap = {'cutoff': 'cutoff', 'active': 'active', 'saturation': 'saturation', 'reverse-active': 'reverse'};
+            Object.keys(idMap).forEach(b => {
+                document.getElementById(`btn-b-${idMap[b]}`).classList.toggle('active', bias === b);
+            });
+            updateTargetPhysics();
+            initWireCircuit();
+            updateExplanation();
+        }
+
+        // 計算目標空乏區與電位 (包含溫度效應)
+        function updateTargetPhysics() {
+            // 物理公式模擬：溫度上升 -> ni上升 -> Vbi下降 -> 空乏區縮小
+            // 300K 基準為 0。500K 為 -1 (縮小)，100K 為 +1 (擴大)。
+            let tempFactor = (300 - temperature) / 200; 
+            let tDepOffset = tempFactor * 15;
+            let tVbiOffset = tempFactor * 10;
+
+            if (currentDevice === 'diode') {
+                if (diodeBias === 'thermal') { 
+                    targetDepW = 50 + tDepOffset; 
+                    targetVbi = 40 + tVbiOffset; 
+                }
+                if (diodeBias === 'forward') { 
+                    targetDepW = Math.max(5, 12 + tDepOffset); 
+                    targetVbi = Math.max(5, 10 + tVbiOffset); 
+                }
+                if (diodeBias === 'reverse') { 
+                    targetDepW = 110 + tDepOffset; 
+                    targetVbi = 90 + tVbiOffset; 
+                }
+            } else {
+                if (bjtBias === 'cutoff') { 
+                    bjtTargetBeDepW = 50 + tDepOffset; bjtTargetBcDepW = 65 + tDepOffset; 
+                    bjtTargetVbe = 30 + tVbiOffset; bjtTargetVbc = 60 + tVbiOffset; 
+                }
+                if (bjtBias === 'active') { 
+                    bjtTargetBeDepW = Math.max(5, 10 + tDepOffset); bjtTargetBcDepW = 85 + tDepOffset; 
+                    bjtTargetVbe = Math.max(5, -25 + tVbiOffset); bjtTargetVbc = 80 + tVbiOffset; 
+                }
+                if (bjtBias === 'saturation') { 
+                    bjtTargetBeDepW = Math.max(5, 10 + tDepOffset); bjtTargetBcDepW = Math.max(5, 12 + tDepOffset); 
+                    bjtTargetVbe = Math.max(5, -25 + tVbiOffset); bjtTargetVbc = Math.max(5, -25 + tVbiOffset); 
+                }
+                if (bjtBias === 'reverse-active') { 
+                    bjtTargetBeDepW = 60 + tDepOffset; bjtTargetBcDepW = Math.max(5, 10 + tDepOffset); 
+                    bjtTargetVbe = 50 + tVbiOffset; bjtTargetVbc = Math.max(5, -25 + tVbiOffset); 
+                }
+            }
+        }
+
+        function initParticles() {
+            electrons = [];
+            holes = [];
+            fixedIons = [];
+            
+            const w = physicsCanvas.width || 800;
+            const h = physicsCanvas.height || 500;
+            
+            const scY = h * 0.15;
+            const scH = h * 0.55;
+            const scW = w * 0.82;
+            const scX = w * 0.09;
+            
+            // 基礎載子數量受摻雜濃度影響
+            const baseCarrierCount = 40 + dopingLevel * 30;
+            
+            if (currentDevice === 'diode') {
+                const junctionX = scX + scW * 0.5;
+                const pWidth = scW * 0.5;
+                const nWidth = scW * 0.5;
+                
+                // 【網格化固定離子】 - 整齊排列，防重疊
+                const maxDepW = 140; 
+                const ionSpacingX = 14;
+                const ionSpacingY = 18;
+                const cols = Math.floor(maxDepW / ionSpacingX);
+                const rows = Math.floor((scH - pad * 2) / ionSpacingY);
+                
+                for (let c = 0; c < cols; c++) {
+                    let xP = junctionX - 7 - c * ionSpacingX; // P區受體 (-)
+                    let xN = junctionX + 7 + c * ionSpacingX; // N區施體 (+)
+                    for (let r = 0; r < rows; r++) {
+                        let yPos = scY + pad + r * ionSpacingY + (Math.random()*2-1);
+                        fixedIons.push({ x: xP, y: yPos, type: 'acceptor' });
+                        fixedIons.push({ x: xN, y: yPos, type: 'donor' });
+                    }
+                }
+
+                // 產生主體載子 (確保產生在安全邊界內)
+                for (let i = 0; i < baseCarrierCount; i++) {
+                    electrons.push(createCarrier(junctionX + 60 + Math.random() * (nWidth - 60 - pr*2), scY + pr*2 + Math.random() * (scH - pr*4), 'electron', 'N'));
+                    holes.push(createCarrier(scX + pr*2 + Math.random() * (pWidth - 60 - pr*2), scY + pr*2 + Math.random() * (scH - pr*4), 'hole', 'P'));
+                }
+
+            } else {
+                // BJT 佈局
+                const eWidth = scW * 0.35;
+                const bWidth = scW * 0.15;
+                const cWidth = scW * 0.5;
+                const eBoundary = scX + eWidth;
+                const cBoundary = eBoundary + bWidth;
+                
+                const drawBjtIons = (jX, maxW, leftType, rightType) => {
+                    const cols = Math.floor(maxW / 14);
+                    const rows = Math.floor((scH - pad*2) / 18);
+                    for(let c=0; c<cols; c++){
+                        for(let r=0; r<rows; r++){
+                            let yPos = scY + pad + r*18;
+                            fixedIons.push({ x: jX - 7 - c*14, y: yPos, type: leftType, junction: jX });
+                            fixedIons.push({ x: jX + 7 + c*14, y: yPos, type: rightType, junction: jX });
+                        }
+                    }
+                };
+
+                if (currentDevice === 'npn') {
+                    drawBjtIons(eBoundary, 60, 'donor', 'acceptor');
+                    drawBjtIons(cBoundary, 90, 'acceptor', 'donor');
+
+                    const eCount = baseCarrierCount * 1.6;
+                    for (let i = 0; i < eCount; i++) electrons.push(createCarrier(scX + pr*2 + Math.random() * (eWidth - 40), scY + pr*2 + Math.random() * (scH - pr*4), 'electron', 'E'));
+                    const bCount = Math.floor(baseCarrierCount * 0.35);
+                    for (let i = 0; i < bCount; i++) holes.push(createCarrier(eBoundary + 15 + Math.random() * (bWidth - 30), scY + pr*2 + Math.random() * (scH - pr*4), 'hole', 'B'));
+                    const cCount = baseCarrierCount * 0.95;
+                    for (let i = 0; i < cCount; i++) electrons.push(createCarrier(cBoundary + 40 + Math.random() * (cWidth - 50), scY + pr*2 + Math.random() * (scH - pr*4), 'electron', 'C'));
+                } else {
+                    // PNP 的摻雜極性相反
+                    drawBjtIons(eBoundary, 60, 'acceptor', 'donor');
+                    drawBjtIons(cBoundary, 90, 'donor', 'acceptor');
+
+                    const eCount = baseCarrierCount * 1.6;
+                    for (let i = 0; i < eCount; i++) holes.push(createCarrier(scX + pr*2 + Math.random() * (eWidth - 40), scY + pr*2 + Math.random() * (scH - pr*4), 'hole', 'E'));
+                    const bCount = Math.floor(baseCarrierCount * 0.35);
+                    for (let i = 0; i < bCount; i++) electrons.push(createCarrier(eBoundary + 15 + Math.random() * (bWidth - 30), scY + pr*2 + Math.random() * (scH - pr*4), 'electron', 'B'));
+                    const cCount = baseCarrierCount * 0.95;
+                    for (let i = 0; i < cCount; i++) holes.push(createCarrier(cBoundary + 40 + Math.random() * (cWidth - 50), scY + pr*2 + Math.random() * (scH - pr*4), 'hole', 'C'));
+                }
+            }
+        }
+
+        function createCarrier(x, y, type, region) {
+            // 根據溫度產生不同的初始動能
+            const tempFactor = (temperature / 300);
+            const baseSpeed = 0.5 + tempFactor * tempFactor * 1.5; // 高溫速度呈現非線性增長
+            const angle = Math.random() * Math.PI * 2;
+            return {
+                x: x, y: y,
+                vx: Math.cos(angle) * baseSpeed * 100,
+                vy: Math.sin(angle) * baseSpeed * 100,
+                type: type, region: region
+            };
+        }
+
+        function updateThermalSpeed(p) {
+            const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy) || 1;
+            const tempFactor = (temperature / 300);
+            const newSpeed = (0.5 + tempFactor * tempFactor * 1.5) * 100;
+            const ratio = newSpeed / speed;
+            p.vx *= ratio; p.vy *= ratio;
+        }
+
+        function initWireCircuit() {
+            wireElectrons = [];
+            for(let i=0; i<20; i++) {
+                wireElectrons.push({ t: Math.random() });
+            }
+        }
+
+        function updatePhysics(dt) {
+            if (dt > 0.1) dt = 0.1; 
+            
+            // 【可調過渡速率】: 讓空乏區依據滑桿慢慢累積變化
+            const speedFactor = dt * 1.5 * transitionSpeed; 
+            currentDepW += (targetDepW - currentDepW) * speedFactor;
+            currentVbi += (targetVbi - currentVbi) * speedFactor;
+            bjtBeDepW += (bjtTargetBeDepW - bjtBeDepW) * speedFactor;
+            bjtBcDepW += (bjtTargetBcDepW - bjtBcDepW) * speedFactor;
+            bjtVbe += (bjtTargetVbe - bjtVbe) * speedFactor;
+            bjtVbc += (bjtTargetVbc - bjtVbc) * speedFactor;
+
+            const w = physicsCanvas.width;
+            const h = physicsCanvas.height;
+            const scY = h * 0.15;
+            const scH = h * 0.55;
+            const scW = w * 0.82;
+            const scX = w * 0.09;
+
+            // --- 【溫度物理效應: 熱激發與復合】 ---
+            // 高於 300K: 大量產生熱激發載子 (Minority carriers)
+            // 低於 300K: 加速復合，清除少數載子
+            if (temperature > 300) {
+                let genRate = ((temperature - 300) / 100) * 10; // 每秒產生機率
+                if (Math.random() < genRate * dt && electrons.length < 200) {
+                    let rx = scX + pr + Math.random() * (scW - 2*pr);
+                    let ry = scY + pr + Math.random() * (scH - 2*pr);
+                    let reg = (currentDevice === 'diode') ? (rx < scX+scW/2 ? 'P' : 'N') : 'Base'; // 簡化處理
+                    electrons.push(createCarrier(rx, ry, 'electron', reg));
+                    holes.push(createCarrier(rx, ry, 'hole', reg));
+                }
+            }
+
+            if (currentDevice === 'diode') {
+                const junctionX = scX + scW * 0.5;
+                const depLeft = junctionX - currentDepW;
+                const depRight = junctionX + currentDepW;
+                const eFieldStrength = currentVbi * 5; 
+
+                // 更新電子 (-)
+                for (let i = electrons.length - 1; i >= 0; i--) {
+                    let e = electrons[i];
+                    e.x += e.vx * dt; e.y += e.vy * dt;
+
+                    // 嚴格邊界碰撞 (扣除粒子半徑 pr)
+                    if (e.x < scX + pr) { e.x = scX + pr; e.vx *= -1; }
+                    if (e.x > scX + scW - pr) { e.x = scX + scW - pr; e.vx *= -1; }
+                    if (e.y < scY + pr) { e.y = scY + pr; e.vy *= -1; }
+                    if (e.y > scY + scH - pr) { e.y = scY + scH - pr; e.vy *= -1; }
+
+                    // 空乏區電場受力
+                    if (e.x > depLeft && e.x < depRight) {
+                        e.vx += eFieldStrength * dt; 
+                        if (diodeBias === 'forward' && e.region === 'N') e.vx -= 120 * dt; 
+                    }
+                }
+
+                // 更新電洞 (+)
+                for (let i = holes.length - 1; i >= 0; i--) {
+                    let hp = holes[i];
+                    hp.x += hp.vx * dt; hp.y += hp.vy * dt;
+
+                    if (hp.x < scX + pr) { hp.x = scX + pr; hp.vx *= -1; }
+                    if (hp.x > scX + scW - pr) { hp.x = scX + scW - pr; hp.vx *= -1; }
+                    if (hp.y < scY + pr) { hp.y = scY + pr; hp.vy *= -1; }
+                    if (hp.y > scY + scH - pr) { hp.y = scY + scH - pr; hp.vy *= -1; }
+
+                    if (hp.x > depLeft && hp.x < depRight) {
+                        hp.vx -= eFieldStrength * dt; 
+                        if (diodeBias === 'forward' && hp.region === 'P') hp.vx += 120 * dt; 
+                    }
+                }
+
+                // 復合機制 (距離內相遇 + 低溫自然消失)
+                for (let i = electrons.length - 1; i >= 0; i--) {
+                    let e = electrons[i];
+                    
+                    // 低溫強迫減少游離載子
+                    if (temperature < 300 && Math.random() < 0.05 * dt) {
+                        electrons.splice(i, 1);
+                        continue;
+                    }
+
+                    for (let j = holes.length - 1; j >= 0; j--) {
+                        let distSq = Math.pow(e.x - holes[j].x, 2) + Math.pow(e.y - holes[j].y, 2);
+                        if (distSq < 100) {
+                            recombinationSparks.push({ x: (e.x + holes[j].x)/2, y: (e.y + holes[j].y)/2, life: 1.0 });
+                            electrons.splice(i, 1);
+                            holes.splice(j, 1);
+                            
+                            // 順向偏壓才從外部補充維持電流
+                            if (diodeBias === 'forward') {
+                                electrons.push(createCarrier(scX + scW - pr*2, scY + pr*2 + Math.random()*(scH - pr*4), 'electron', 'N'));
+                                holes.push(createCarrier(scX + pr*2, scY + pr*2 + Math.random()*(scH - pr*4), 'hole', 'P'));
+                            }
+                            break;
+                        }
+                    }
+                }
+
+            } else {
+                // BJT 動態物理
+                const eBound = scX + scW * 0.35;
+                const cBound = eBound + scW * 0.15;
+                let beField = bjtVbe * 4; 
+                let bcField = bjtVbc * 4;
+
+                // 根據 NPN / PNP 判斷主要載子
+                let mainCarriers = currentDevice === 'npn' ? electrons : holes;
+                let minorityCarriers = currentDevice === 'npn' ? holes : electrons;
+
+                for (let i = mainCarriers.length - 1; i >= 0; i--) {
+                    let c = mainCarriers[i];
+                    c.x += c.vx * dt; c.y += c.vy * dt;
+
+                    if (c.x < scX + pr) { c.x = scX + pr; c.vx *= -1; }
+                    if (c.x > scX + scW - pr) { c.x = scX + scW - pr; c.vx *= -1; }
+                    if (c.y < scY + pr) { c.y = scY + pr; c.vy *= -1; }
+                    if (c.y > scY + scH - pr) { c.y = scY + scH - pr; c.vy *= -1; }
+
+                    if (c.x > eBound - bjtBeDepW && c.x < eBound + bjtBeDepW) {
+                        c.vx += beField * dt; 
+                        if (bjtBias === 'active' || bjtBias === 'saturation') c.vx += 300 * dt; 
+                    }
+                    if (c.x > cBound - bjtBcDepW && c.x < cBound + bjtBcDepW) {
+                        c.vx += bcField * dt;
+                        if (bjtBias === 'active') c.vx += 600 * dt; 
+                    }
+                }
+                
+                for (let i = minorityCarriers.length - 1; i >= 0; i--) {
+                    let mc = minorityCarriers[i];
+                    mc.x += mc.vx * dt; mc.y += mc.vy * dt;
+                    if (mc.x < scX + pr) { mc.x = scX + pr; mc.vx *= -1; }
+                    if (mc.x > scX + scW - pr) { mc.x = scX + scW - pr; mc.vx *= -1; }
+                    if (mc.y < scY + pr) { mc.y = scY + pr; mc.vy *= -1; }
+                    if (mc.y > scY + scH - pr) { mc.y = scY + scH - pr; mc.vy *= -1; }
+                }
+            }
+
+            for (let i = recombinationSparks.length - 1; i >= 0; i--) {
+                recombinationSparks[i].life -= 2.0 * dt;
+                if (recombinationSparks[i].life <= 0) recombinationSparks.splice(i, 1);
+            }
+            updateWireElectrons(dt);
+        }
+
+        function updateWireElectrons(dt) {
+            let speed = 0;
+            if (currentDevice === 'diode' && diodeBias === 'forward') speed = 0.8;
+            if ((currentDevice === 'npn' || currentDevice === 'pnp') && (bjtBias === 'active' || bjtBias === 'saturation')) speed = 0.6;
+
+            for (let i = wireElectrons.length - 1; i >= 0; i--) {
+                wireElectrons[i].t += speed * dt;
+                if (wireElectrons[i].t >= 1.0) wireElectrons[i].t = 0.0;
+            }
+        }
+
+        function drawPhysics() {
+            const w = physicsCanvas.width;
+            const h = physicsCanvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const scY = h * 0.15;
+            const scH = h * 0.55;
+            const scW = w * 0.82;
+            const scX = w * 0.09;
+
+            // 1. 導線與電池
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            
+            if (currentDevice === 'diode') {
+                ctx.moveTo(scX, scY + scH/2); ctx.lineTo(scX - 40, scY + scH/2);
+                ctx.lineTo(scX - 40, scY + scH + 40); ctx.lineTo(w/2 - 20, scY + scH + 40);
+                
+                ctx.moveTo(scX + scW, scY + scH/2); ctx.lineTo(scX + scW + 40, scY + scH/2);
+                ctx.lineTo(scX + scW + 40, scY + scH + 40); ctx.lineTo(w/2 + 20, scY + scH + 40);
+                ctx.stroke();
+                
+                let dLabel = "0V";
+                if (diodeBias === 'forward') dLabel = "+   -";
+                else if (diodeBias === 'reverse') dLabel = "-   +";
+                drawBattery(w/2, scY + scH + 40, dLabel);
+            } else {
+                const eBound = scX + scW * 0.35;
+                const cBound = eBound + scW * 0.15;
+                const baseX = eBound + (scW * 0.15) / 2;
+                const wireY = scY + scH + 40;
+                
+                ctx.moveTo(scX, scY + scH/2); ctx.lineTo(scX - 30, scY + scH/2); ctx.lineTo(scX - 30, wireY); ctx.lineTo(baseX, wireY);
+                ctx.moveTo(scX + scW, scY + scH/2); ctx.lineTo(scX + scW + 30, scY + scH/2); ctx.lineTo(scX + scW + 30, wireY); ctx.lineTo(baseX, wireY);
+                ctx.moveTo(baseX, scY + scH); ctx.lineTo(baseX, wireY);
+                ctx.stroke();
+
+                let eLabel = "0V";
+                let cLabel = "0V";
+                if (bjtBias !== 'cutoff') {
+                    if (currentDevice === 'npn') {
+                        if (bjtBias === 'active') { eLabel = "-   +"; cLabel = "-   +"; }
+                        else if (bjtBias === 'saturation') { eLabel = "-   +"; cLabel = "+   -"; }
+                        else if (bjtBias === 'reverse-active') { eLabel = "+   -"; cLabel = "+   -"; }
+                    } else if (currentDevice === 'pnp') {
+                        if (bjtBias === 'active') { eLabel = "+   -"; cLabel = "+   -"; }
+                        else if (bjtBias === 'saturation') { eLabel = "+   -"; cLabel = "-   +"; }
+                        else if (bjtBias === 'reverse-active') { eLabel = "-   +"; cLabel = "-   +"; }
+                    }
+                }
+                drawBattery((scX - 30 + baseX) / 2, wireY, eLabel);
+                drawBattery((scX + scW + 30 + baseX) / 2, wireY, cLabel);
+            }
+
+            // 2. 本體背景與發光邊框
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(scX, scY, scW, scH);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#3b82f6';
+            ctx.shadowColor = '#3b82f6';
+            ctx.shadowBlur = 15;
+            ctx.strokeRect(scX, scY, scW, scH);
+            ctx.shadowBlur = 0; 
+
+            ctx.font = 'bold 24px Inter';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            if (currentDevice === 'diode') {
+                const junctionX = scX + scW * 0.5;
+                
+                // 動態繪製空乏區背景
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.fillRect(junctionX - currentDepW, scY, currentDepW * 2, scH);
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.fillText('P 型', scX + scW * 0.25, scY + scH / 2);
+                ctx.fillText('N 型', scX + scW * 0.75, scY + scH / 2);
+
+                // 動態空乏區邊界
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(junctionX - currentDepW, scY); ctx.lineTo(junctionX - currentDepW, scY + scH);
+                ctx.moveTo(junctionX + currentDepW, scY); ctx.lineTo(junctionX + currentDepW, scY + scH);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // 標籤移到外面避免與粒子重疊
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.font = '12px Inter';
+                ctx.fillText('空乏區', junctionX, scY + scH + 20);
+                
+                // 3. 繪製固定離子 (判斷條件：在當前的空乏區範圍內才顯現)
+                fixedIons.forEach(ion => {
+                    if (Math.abs(ion.x - junctionX) <= currentDepW) {
+                        drawIon(ion);
+                    }
+                });
+
+            } else {
+                const eBound = scX + scW * 0.35;
+                const cBound = eBound + scW * 0.15;
+                
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                if (currentDevice === 'npn') {
+                    ctx.fillText('N (E)', scX + (scW * 0.35) / 2, scY + scH / 2);
+                    ctx.font = 'bold 16px Inter';
+                    ctx.fillText('P (B)', eBound + (scW * 0.15) / 2, scY + scH / 2);
+                    ctx.font = 'bold 24px Inter';
+                    ctx.fillText('N (C)', cBound + (scW * 0.5) / 2, scY + scH / 2);
+                } else {
+                    ctx.fillText('P (E)', scX + (scW * 0.35) / 2, scY + scH / 2);
+                    ctx.font = 'bold 16px Inter';
+                    ctx.fillText('N (B)', eBound + (scW * 0.15) / 2, scY + scH / 2);
+                    ctx.font = 'bold 24px Inter';
+                    ctx.fillText('P (C)', cBound + (scW * 0.5) / 2, scY + scH / 2);
+                }
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(eBound, scY); ctx.lineTo(eBound, scY + scH);
+                ctx.moveTo(cBound, scY); ctx.lineTo(cBound, scY + scH);
+                ctx.stroke();
+                
+                fixedIons.forEach(ion => {
+                    let activeDep = ion.junction === eBound ? bjtBeDepW : bjtBcDepW;
+                    if (Math.abs(ion.x - ion.junction) <= activeDep) {
+                        drawIon(ion);
+                    }
+                });
+            }
+            
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+            // 4. 動態載子 (使用變數半徑 pr)
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#3b82f6';
+            ctx.fillStyle = '#3b82f6';
+            electrons.forEach(e => {
+                ctx.beginPath(); ctx.arc(e.x, e.y, pr - 1, 0, Math.PI * 2); ctx.fill();
+            });
+
+            ctx.shadowColor = '#f43f5e';
+            ctx.fillStyle = '#f43f5e';
+            holes.forEach(h => {
+                ctx.beginPath(); ctx.arc(h.x, h.y, pr - 1, 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+
+            // 5. 火花
+            recombinationSparks.forEach(spark => {
+                ctx.beginPath(); ctx.arc(spark.x, spark.y, 12 * (1 - spark.life), 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(250, 204, 21, ${spark.life})`; ctx.lineWidth = 2; ctx.stroke();
+                ctx.beginPath(); ctx.arc(spark.x, spark.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${spark.life})`; ctx.fill();
+            });
+        }
+
+        function drawIon(ion) {
+            ctx.beginPath();
+            ctx.arc(ion.x, ion.y, 6, 0, Math.PI * 2); // 離子大小
+            if (ion.type === 'donor') {
+                ctx.strokeStyle = 'rgba(96, 165, 250, 0.8)';
+                ctx.fillStyle = 'rgba(96, 165, 250, 0.2)';
+            } else {
+                ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.2)';
+            }
+            ctx.fill(); ctx.lineWidth = 1; ctx.stroke();
+            
+            ctx.fillStyle = ion.type === 'donor' ? 'rgba(96, 165, 250, 0.9)' : 'rgba(244, 63, 94, 0.9)';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(ion.type === 'donor' ? '+' : '-', ion.x, ion.y);
+        }
+
+        function drawBattery(cx, cy, label) {
+            ctx.fillStyle = '#1e293b'; ctx.fillRect(cx - 20, cy - 10, 40, 20);
+            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.strokeRect(cx - 20, cy - 10, 40, 20);
+            ctx.fillStyle = '#94a3b8'; ctx.font = '12px Arial';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(label, cx, cy);
+        }
+
+        function drawBandDiagram() {
+            const w = bandCanvas.width;
+            const h = bandCanvas.height;
+            bandCtx.clearRect(0, 0, w, h);
+
+            bandCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            bandCtx.lineWidth = 1;
+            bandCtx.beginPath();
+            bandCtx.moveTo(20, 20); bandCtx.lineTo(20, h - 20);
+            bandCtx.moveTo(20, h - 20); bandCtx.lineTo(w - 20, h - 20);
+            bandCtx.stroke();
+            
+            bandCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            bandCtx.font = '10px Inter';
+            bandCtx.fillText('能量 E', 5, 15);
+            bandCtx.fillText('位置 x', w - 30, h - 5);
+
+            bandCtx.lineWidth = 3;
+            const steps = 100;
+            const stepW = (w - 60) / steps;
+            const startX = 40;
+
+            let Ec = [], Ev = [], Ef = [];
+
+            if (currentDevice === 'diode') {
+                const jIdx = 50; 
+                let visWidth = Math.max(2, currentDepW / 4); 
+
+                for (let i = 0; i <= steps; i++) {
+                    let yShift = 0;
+                    if (i < jIdx - visWidth) yShift = 0;
+                    else if (i > jIdx + visWidth) yShift = currentVbi;
+                    else {
+                        const t = (i - (jIdx - visWidth)) / (2 * visWidth);
+                        yShift = currentVbi * (0.5 - 0.5 * Math.cos(t * Math.PI)); 
+                    }
+                    
+                    Ec.push({x: startX + i * stepW, y: 40 + yShift});
+                    Ev.push({x: startX + i * stepW, y: 120 + yShift});
+                    
+                    if (diodeBias === 'thermal') {
+                        Ef.push({x: startX + i * stepW, y: 100}); 
+                    } else if (diodeBias === 'forward') {
+                        Ef.push({x: startX + i * stepW, y: i < jIdx ? 100 : 100 - (currentVbi-40)}); 
+                    } else {
+                        Ef.push({x: startX + i * stepW, y: i < jIdx ? 100 : 100 + (currentVbi-40)}); 
+                    }
+                }
+            } else {
+                const eIdx = 35;
+                const cIdx = 50; 
+                let isPNP = (currentDevice === 'pnp');
+                let sign = isPNP ? -1 : 1; 
+                let baseOffset = isPNP ? 70 : 0; // PNP 時整個能帶圖下移並反轉勢壘
+
+                for (let i = 0; i <= steps; i++) {
+                    let yShift = 0;
+                    if (i < eIdx - 5) yShift = bjtVbe; 
+                    else if (i > eIdx + 5 && i < cIdx - 5) yShift = 0; 
+                    else if (i > cIdx + 5) yShift = bjtVbc; 
+                    else {
+                        if (i >= eIdx - 5 && i <= eIdx + 5) {
+                            let t = (i - (eIdx - 5)) / 10;
+                            yShift = bjtVbe * (1 - t);
+                        } else {
+                            let t = (i - (cIdx - 5)) / 10;
+                            yShift = bjtVbc * t;
+                        }
+                    }
+                    Ec.push({x: startX + i * stepW, y: 60 + baseOffset + sign * yShift});
+                    Ev.push({x: startX + i * stepW, y: 140 + baseOffset + sign * yShift});
+                    Ef.push({x: startX + i * stepW, y: 120 + (isPNP ? 20 : 0)}); // 調整費米能階位置
+                }
+            }
+
+            const drawPath = (path, color, isDashed = false) => {
+                bandCtx.beginPath();
+                bandCtx.strokeStyle = color;
+                if (isDashed) bandCtx.setLineDash([5, 5]);
+                else bandCtx.setLineDash([]);
+                
+                bandCtx.moveTo(path[0].x, path[0].y);
+                for (let i = 1; i < path.length; i++) bandCtx.lineTo(path[i].x, path[i].y);
+                bandCtx.stroke();
+                bandCtx.setLineDash([]);
+            };
+
+            drawPath(Ec, '#3b82f6'); 
+            drawPath(Ev, '#f43f5e'); 
+            drawPath(Ef, '#22c55e', true); 
+            
+            bandCtx.fillStyle = '#3b82f6'; bandCtx.fillText('Ec', Ec[Ec.length-1].x + 5, Ec[Ec.length-1].y);
+            bandCtx.fillStyle = '#f43f5e'; bandCtx.fillText('Ev', Ev[Ev.length-1].x + 5, Ev[Ev.length-1].y);
+            bandCtx.fillStyle = '#22c55e'; bandCtx.fillText('Ef', Ef[0].x, Ef[0].y - 5);
+        }
+
+        function animate(time) {
+            if (!lastTime) lastTime = time;
+            let dt = (time - lastTime) / 1000; 
+            lastTime = time;
+
+            updatePhysics(dt);
+            drawPhysics();
+            drawBandDiagram();
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function updateExplanation() {
+            const expText = document.getElementById('explanation-text');
+            let text = "";
+            let tStr = temperature > 300 ? "【高溫態】本徵載子激增，內建電位略降。\n" : (temperature < 300 ? "【低溫態】游離載子減少，熱激發停止。\n" : "");
+
+            if (currentDevice === 'diode') {
+                if (diodeBias === 'thermal') text = tStr + "【熱平衡】擴散與漂移電流抵銷。空乏區內建電場穩定建立，阻止多數載子繼續越界。";
+                else if (diodeBias === 'forward') text = tStr + "【順向偏壓】外部電壓抵銷內建電位，空乏區收縮變窄。勢壘降低使大量載子湧入對側並復合發光。";
+                else if (diodeBias === 'reverse') text = tStr + "【逆向偏壓】外部電壓與內建電場疊加，空乏區向兩側大幅擴張。接面處幾乎無多數載子，僅剩微小漏電流。";
+            } else {
+                let isNPN = currentDevice === 'npn';
+                let bjtType = isNPN ? "NPN" : "PNP";
+                let mainCar = isNPN ? "電子" : "電洞";
+                
+                if (bjtBias === 'cutoff') text = tStr + `【截止區】雙接面皆逆偏。勢壘極高，幾乎沒有載子能穿越，${bjtType} 電晶體形同斷路。`;
+                else if (bjtBias === 'active') text = tStr + `【主動區】EB 順偏，BC 逆偏。大量${mainCar}自射極(E)注入基極(B)，被收集極(C)逆向電場掃入，達成電流放大。`;
+                else if (bjtBias === 'saturation') text = tStr + `【飽和區】雙接面皆順偏。勢壘降低，元件充滿高濃度載子，完全導通。`;
+                else if (bjtBias === 'reverse-active') text = tStr + `【反向主動】BC 順偏，EB 逆偏。角色互換，但因摻雜不對稱，放大效率極差。`;
+            }
+            expText.innerText = text;
+        }
+    </script>
+</body>
+</html>
