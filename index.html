@@ -54,7 +54,7 @@
         </div>
         <div>
           <h1 class="text-xl md:text-2xl font-bold tracking-wider text-white">半導體載子物理與傳輸模擬器</h1>
-          <p class="text-xs text-slate-400">真實模擬：外部電極（金屬接觸端）動態載子補給 & 載子複合壽命（徘徊複合）</p>
+          <p class="text-xs text-slate-400">真實模擬：外部電池、導線閉合迴路傳輸、電極載子補給與載子壽命</p>
         </div>
       </div>
       
@@ -88,13 +88,14 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-sm"></span> 電子</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-sm"></span> 電洞</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm animate-pulse"></span> 徘徊複合中</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 bg-slate-500 inline-block"></span> 金屬接觸端</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-slate-500 inline-block"></span> 金屬接觸端</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-400 inline-block"></span> 導線中的電子</span>
           </div>
         </div>
 
         <!-- Canvas -->
         <div class="relative bg-slate-950 rounded-xl border border-slate-850 p-1 flex justify-center items-center overflow-hidden">
-          <canvas id="physicsCanvas" class="w-full h-[320px] md:h-[380px] bg-slate-950 block rounded-lg"></canvas>
+          <canvas id="physicsCanvas" class="w-full h-[340px] md:h-[400px] bg-slate-950 block rounded-lg"></canvas>
           
           <!-- HUD Left -->
           <div class="absolute bottom-4 left-4 bg-slate-900/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800 text-xs space-y-1 shadow-lg">
@@ -156,9 +157,9 @@
         
         <div class="grid grid-cols-2 gap-3 mb-4">
           <div class="bg-slate-950 p-3 rounded-xl border border-slate-850 text-center">
-            <span class="text-[10px] text-slate-400 block mb-1">電極注入新電子</span>
+            <span class="text-[10px] text-slate-400 block mb-1">電極與導線總流動</span>
             <span id="stat-injections" class="text-lg font-bold text-emerald-400 code-font">0</span>
-            <span class="text-[10px] text-slate-500 block">顆 (動態補給)</span>
+            <span class="text-[10px] text-slate-500 block">顆 (閉合迴路傳輸)</span>
           </div>
           <div class="bg-slate-950 p-3 rounded-xl border border-slate-850 text-center">
             <span class="text-[10px] text-slate-400 block mb-1">正在進行複合</span>
@@ -168,8 +169,8 @@
         </div>
 
         <div class="p-3 bg-slate-950 rounded-xl border border-slate-850 text-xs text-slate-400 space-y-2">
-          <div class="flex justify-between"><span>左側接觸電極 (P-Contact):</span> <span class="text-amber-400 font-bold" id="left-contact-state">注入電洞中</span></div>
-          <div class="flex justify-between"><span>右側接觸電極 (N-Contact):</span> <span class="text-emerald-400 font-bold" id="right-contact-state">吸入電子中</span></div>
+          <div class="flex justify-between"><span>左側接觸電極 (P-Contact):</span> <span class="text-amber-400 font-bold" id="left-contact-state">電極連通中</span></div>
+          <div class="flex justify-between"><span>右側接觸電極 (N-Contact):</span> <span class="text-emerald-400 font-bold" id="right-contact-state">電極連通中</span></div>
         </div>
       </div>
 
@@ -198,14 +199,14 @@
           <input type="range" id="slider-na" min="1" max="3" value="2" oninput="updateParameters()" class="w-full h-1 bg-slate-800 rounded accent-amber-500">
         </div>
 
-        <!-- Carrier Lifetime (NEW) -->
+        <!-- Carrier Lifetime -->
         <div>
           <div class="flex justify-between items-center mb-1">
             <label class="text-xs text-slate-300">載子複合壽命 (τ_n)</label>
             <span class="text-xs font-bold text-rose-400 code-font" id="label-lifetime">1.5 秒</span>
           </div>
           <input type="range" id="slider-lifetime" min="5" max="30" value="15" oninput="updateParameters()" class="w-full h-1 bg-slate-800 rounded accent-rose-500">
-          <span class="text-[10px] text-slate-500">電子在複合前徘徊的壽命。壽命長代表徘徊久。</span>
+          <span class="text-[10px] text-slate-500">電子在與電洞正式複合前，維持激發徘徊狀態的時間。</span>
         </div>
 
         <!-- Base Width (BJT Only) -->
@@ -227,12 +228,12 @@
         
         <div class="space-y-3 text-xs leading-relaxed text-slate-400">
           <div class="p-3 bg-slate-950 rounded-xl border border-slate-850">
-            <h4 class="font-bold text-slate-200 mb-1">🔋 電荷中性 (Charge Neutrality)</h4>
-            <p>當電子被外加電場抽吸走、或是與電洞複合消失時，半導體內部會瞬間失去中性。此時，**外部金屬接觸端會立刻補充電荷**，以維持材料內部電荷平衡。</p>
+            <h4 class="font-bold text-slate-200 mb-1">🔋 電荷守恆與外部迴路</h4>
+            <p>半導體內部流失的電子，必須經由金屬接觸端從外部導線源源不絕地補充。利用<strong>導線中的電子流動與電池推力</strong>，才能形成不間斷的封閉迴路電流。</p>
           </div>
           <div class="p-3 bg-slate-950 rounded-xl border border-slate-850">
-            <h4 class="font-bold text-slate-200 mb-1">⏳ 載子壽命 (Carrier Lifetime)</h4>
-            <p>少數載子進入相反區域後，並非立刻湮滅。它們會先形成**激發態（徘徊、擴散）**，在經過統計上的平均壽命 $\tau_n$ 後，能量釋放完畢才正式與主格電洞複合。</p>
+            <h4 class="font-bold text-slate-200 mb-1">⚡ 節點電流定律 (KCL)</h4>
+            <p>在 BJT 放大區中，射極流出的總電子流，在微觀上完美等於「集極回收的電子」與「基極複合產生的外部電子」之總和，驗證了 $I_E = I_C + I_B$。</p>
           </div>
         </div>
       </div>
@@ -243,13 +244,10 @@
 
   <!-- Footer -->
   <footer class="bg-slate-900 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-400">
-    <p>© 2026 半導體教材 | 二極體與 BJT 微觀粒子傳輸 & 電極補給機制</p>
+    <p>© 2026 半導體教材 | 二極體與 BJT 微觀粒子傳輸、電池迴路與電極補給機制</p>
   </footer>
 
   <script>
-    // ----------------------------------------------------
-    // STATE & CONFIG
-    // ----------------------------------------------------
     let currentComponent = 'diode';
     
     let state = {
@@ -267,6 +265,7 @@
     const canvas = document.getElementById('physicsCanvas');
     const ctx = canvas.getContext('2d');
     let particles = [];
+    let wireElectrons = []; // Electrons flowing in the external wires
     let animationFrameId = null;
 
     // Contact electro flashes
@@ -274,8 +273,12 @@
     let rightContactFlash = 0;
     let baseContactFlash = 0;
 
+    // Layout configuration coordinates
+    const SEMI_Y = 50;
+    const SEMI_H = 200; // Height of semiconductor blocks (leave space below for wires/batteries)
+
     // ----------------------------------------------------
-    // CARRIER CLASS (With Lifetime state)
+    // CARRIER CLASS (Inside Semiconductor)
     // ----------------------------------------------------
     class Carrier {
       constructor(type, x, y, speedX, speedY, region) {
@@ -288,31 +291,26 @@
         this.region = region; // Birth region
         
         // Recombination States
-        this.isRecombining = false; // Is in "lifetime" phase (hovering/recombining)
-        this.recombinationTimer = 0; // Tick timer for lifetime
-        this.partner = null; // Associated opposite carrier
+        this.isRecombining = false; 
+        this.recombinationTimer = 0; 
+        this.partner = null; 
       }
 
       update() {
         if (this.isRecombining) {
-          // Recombination state: Carriers are locked in a "dance/lifetime spiral"
           this.recombinationTimer++;
-          
-          // Slow orbital motion to represent energy decay/hovering
           if (this.partner) {
             const dx = this.partner.x - this.x;
             const dy = this.partner.y - this.y;
             const dist = Math.hypot(dx, dy);
-            
             if (dist > 2) {
               this.x += (dx / dist) * 0.4;
               this.y += (dy / dist) * 0.4;
             }
           }
-          return; // Skip normal physics when recombining
+          return; 
         }
 
-        // Normal drift / diffusion physics
         this.x += this.speedX;
         this.y += this.speedY;
 
@@ -325,9 +323,7 @@
 
       draw(ctx) {
         ctx.save();
-        
         if (this.isRecombining) {
-          // Draw excited state (recombining aura with red neon pulse)
           const pulse = Math.abs(Math.sin(this.recombinationTimer * 0.15));
           ctx.shadowBlur = 12;
           ctx.shadowColor = '#ef4444';
@@ -336,7 +332,6 @@
           ctx.fillStyle = `rgba(239, 68, 68, ${0.5 + pulse * 0.5})`;
           ctx.fill();
         } else {
-          // Standard carrier draw
           ctx.shadowBlur = this.type === 'electron' ? 5 : 7;
           ctx.shadowColor = this.type === 'electron' ? '#34d399' : '#fbbf24';
           ctx.beginPath();
@@ -344,9 +339,146 @@
           ctx.fillStyle = this.type === 'electron' ? '#34d399' : '#fbbf24';
           ctx.fill();
         }
-        
         ctx.restore();
       }
+    }
+
+    // ----------------------------------------------------
+    // WIRE ELECTRON CLASS (In External Circuits)
+    // ----------------------------------------------------
+    class WireElectron {
+      constructor(path, speed = 3.5, onComplete = null) {
+        this.path = path; // Array of {x, y}
+        this.pathIndex = 0;
+        this.x = path[0].x;
+        this.y = path[0].y;
+        this.speed = speed;
+        this.size = 2.5;
+        this.onComplete = onComplete;
+      }
+
+      update() {
+        if (this.pathIndex >= this.path.length - 1) {
+          if (this.onComplete) this.onComplete();
+          return false; // delete me
+        }
+
+        let target = this.path[this.pathIndex + 1];
+        let dx = target.x - this.x;
+        let dy = target.y - this.y;
+        let dist = Math.hypot(dx, dy);
+
+        if (dist < this.speed) {
+          this.pathIndex++;
+          if (this.pathIndex >= this.path.length - 1) {
+            if (this.onComplete) this.onComplete();
+            return false;
+          }
+          target = this.path[this.pathIndex + 1];
+          dx = target.x - this.x;
+          dy = target.y - this.y;
+          dist = Math.hypot(dx, dy);
+        }
+
+        this.x += (dx / dist) * this.speed;
+        this.y += (dy / dist) * this.speed;
+        return true;
+      }
+
+      draw(ctx) {
+        ctx.save();
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = '#38bdf8'; // Sky blue for wire electron
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Helper to spawn wire electrons dynamically for Diode
+    function spawnDiodeWireElectron(fromX, fromY) {
+      totalInjections++;
+      document.getElementById('stat-injections').innerText = totalInjections;
+
+      // Closed loop path:
+      // Left electrode (30, y) -> left wire (15, y) -> (15, 300) -> Battery -> right wire (535, 300) -> (535, targetY) -> Right Electrode (520, targetY)
+      const targetY = Math.random() * (SEMI_H - 40) + SEMI_Y + 20;
+      
+      const path = [
+        { x: fromX, y: fromY },
+        { x: 15, y: fromY },
+        { x: 15, y: 300 },
+        { x: 240, y: 300 }, // approach battery +
+        { x: 310, y: 300 }, // leave battery -
+        { x: 535, y: 300 },
+        { x: 535, y: targetY },
+        { x: 520, y: targetY }
+      ];
+
+      wireElectrons.push(new WireElectron(path, 3.8, () => {
+        // Upon arrival, inject a fresh semiconductor electron at the N-region
+        injectCarrierDirectly('electron', 500, targetY, 'N');
+      }));
+    }
+
+    // Helper to spawn wire electrons for BJT Collector Loop
+    function spawnBjtCollectorWireElectron(fromX, fromY) {
+      totalInjections++;
+      document.getElementById('stat-injections').innerText = totalInjections;
+
+      const targetY = Math.random() * (SEMI_H - 40) + SEMI_Y + 20;
+
+      // Collector Electrode (520, y) -> (535, y) -> (535, 310) -> V_CC battery -> Common ground wire (15, 310) -> (15, targetY) -> Emitter (30, targetY)
+      const path = [
+        { x: fromX, y: fromY },
+        { x: 535, y: fromY },
+        { x: 535, y: 310 },
+        { x: 335, y: 310 }, // approach V_CC +
+        { x: 265, y: 310 }, // leave V_CC -
+        { x: 15, y: 310 },
+        { x: 15, y: targetY },
+        { x: 30, y: targetY }
+      ];
+
+      wireElectrons.push(new WireElectron(path, 4.2, () => {
+        injectCarrierDirectly('electron', 40, targetY, 'E');
+      }));
+    }
+
+    // Helper to spawn wire electrons for BJT Base Loop
+    function spawnBjtBaseWireElectron(fromX, fromY) {
+      totalInjections++;
+      document.getElementById('stat-injections').innerText = totalInjections;
+
+      const targetY = Math.random() * (SEMI_H - 40) + SEMI_Y + 20;
+
+      // Base Contact (baseX, 250) -> down to (baseX, 280) -> V_BB battery -> Common ground wire (15, 280) -> (15, targetY) -> Emitter (30, targetY)
+      const path = [
+        { x: fromX, y: fromY },
+        { x: fromX, y: 280 },
+        { x: 185, y: 280 }, // approach V_BB +
+        { x: 125, y: 280 }, // leave V_BB -
+        { x: 15, y: 280 },
+        { x: 15, y: targetY },
+        { x: 30, y: targetY }
+      ];
+
+      wireElectrons.push(new WireElectron(path, 3.5, () => {
+        injectCarrierDirectly('electron', 40, targetY, 'E');
+      }));
+    }
+
+    function injectCarrierDirectly(type, x, y, region) {
+      particles.push(new Carrier(
+        type,
+        x,
+        y,
+        type === 'electron' ? (Math.random() * 0.5 + 0.3) : (Math.random() - 0.5) * 0.4,
+        (Math.random() - 0.5) * 0.4,
+        region
+      ));
     }
 
     // ----------------------------------------------------
@@ -354,7 +486,7 @@
     // ----------------------------------------------------
     function handleDiodePhysics(p) {
       const junctionX = 275;
-      const leftElectrode = 30;  // Metal boundaries (Left and right)
+      const leftElectrode = 30;  
       const rightElectrode = 520;
 
       let barrierHalfWidth = 15;
@@ -367,27 +499,23 @@
       // Barrier interaction
       if (p.x > barrierLeft && p.x < barrierRight) {
         if (state.operationalState === 'unbiased') {
-          // Bounce back majority carriers
           if (p.type === 'electron' && p.speedX > 0) p.speedX = -p.speedX;
           if (p.type === 'hole' && p.speedX < 0) p.speedX = -p.speedX;
         } else if (state.operationalState === 'reverse') {
-          // Strong electric field pulls carriers AWAY towards outer boundaries
           if (p.type === 'electron' && p.x < junctionX + 45) p.speedX = Math.abs(p.speedX) * 1.6;
           if (p.type === 'hole' && p.x > junctionX - 45) p.speedX = -Math.abs(p.speedX) * 1.6;
         }
       }
 
-      // 1. Recombination check: when carriers deep in opposite territories
+      // Recombination check
       if (!p.isRecombining) {
         if (p.type === 'electron' && p.x < barrierLeft) {
-          // Electron in P territory: Look for an un-recombining hole to trigger lifetime
           let partnerHole = findNearbyUnboundCarrier(p.x, p.y, 'hole', 25);
           if (partnerHole && Math.random() < 0.08) {
             triggerRecombinationLifetime(p, partnerHole);
           }
         }
         if (p.type === 'hole' && p.x > barrierRight) {
-          // Hole in N territory
           let partnerElectron = findNearbyUnboundCarrier(p.x, p.y, 'electron', 25);
           if (partnerElectron && Math.random() < 0.08) {
             triggerRecombinationLifetime(p, partnerElectron);
@@ -395,15 +523,15 @@
         }
       }
 
-      // 2. Electrode Boundary Sweep & Instant Feed Back
-      // When electron reaches left metal boundary (or hole reaches right metal boundary) -> swept into wire!
+      // Electrode sweeps & loop transport injection
       if (p.x <= leftElectrode) {
         if (p.type === 'electron') {
-          // Electrons leave the system via Left Metal Electrode
+          // Swept out! Go into the wire and cycle to the right electrode
           removeParticle(p);
           triggerMetalFlash('left');
-          // Charge Conservation: Feed new electron instantly at the Right Metal Electrode
-          injectCarrier('electron', rightElectrode - 10, 'N');
+          if (state.operationalState === 'forward') {
+            spawnDiodeWireElectron(leftElectrode, p.y);
+          }
         } else {
           p.speedX = Math.abs(p.speedX); // Hole bounces back inside
         }
@@ -411,18 +539,20 @@
 
       if (p.x >= rightElectrode) {
         if (p.type === 'hole') {
-          // Holes leave the system via Right Metal Electrode
+          // Hole collected at right electrode is physically equivalent to an electron entering the electrode.
+          // To balance charges, we spawn a wire electron traveling left-to-right to neutralize.
           removeParticle(p);
           triggerMetalFlash('right');
-          // Charge Conservation: Feed new hole instantly at the Left Metal Electrode
-          injectCarrier('hole', leftElectrode + 10, 'P');
+          if (state.operationalState === 'forward') {
+            spawnDiodeWireElectron(leftElectrode, Math.random() * (SEMI_H - 40) + SEMI_Y + 20);
+          }
         } else {
           if (state.operationalState === 'forward' && p.type === 'electron') {
-            // Forward biased: electron exits right electrode
+            // Electron exits right electrode (Forward bias loops electron)
             removeParticle(p);
             triggerMetalFlash('right');
-            // instantly feed new electron from left electrode
-            injectCarrier('electron', leftElectrode + 15, 'P');
+            // This is equivalent to electron flowing into the battery + terminal, so we spawn a loop replenishment
+            spawnDiodeWireElectron(leftElectrode, Math.random() * (SEMI_H - 40) + SEMI_Y + 20);
           } else {
             p.speedX = -Math.abs(p.speedX);
           }
@@ -441,13 +571,7 @@
       
       const leftElectrode = 30; // Emitter contact
       const rightElectrode = 520; // Collector contact
-      const baseContactY = 320; // Base contact at bottom of P-region
-
-      let jeB = 10;
-      let jcB = 15;
-      if (state.operationalState === 'cutoff') { jeB = 35; jcB = 40; }
-      else if (state.operationalState === 'active') { jeB = 3; jcB = 28; }
-      else if (state.operationalState === 'saturation') { jeB = 3; jcB = 3; }
+      const baseX = (ebJ + bcJ) / 2;
 
       // Normal movement inside regions
       if (p.type === 'electron') {
@@ -457,13 +581,13 @@
             p.speedX = -Math.abs(p.speedX);
             p.x = ebJ - 13;
           } else {
-            p.speedX = Math.max(p.speedX, 1.4); // Injection speed boost
+            p.speedX = Math.max(p.speedX, 1.4); 
           }
         }
 
         // Diffusing inside Base (P-region)
         if (p.x > ebJ + 5 && p.x < bcJ) {
-          p.speedX = Math.max(p.speedX * 0.98, 0.45); // diffusion damping
+          p.speedX = Math.max(p.speedX * 0.98, 0.45); 
           
           // Recombination lifetime trigger with base holes
           if (!p.isRecombining && Math.random() < 0.05) {
@@ -477,11 +601,11 @@
         // B -> C Sweep
         if (p.x >= bcJ - 10 && p.x <= bcJ + 10) {
           if (state.operationalState === 'active') {
-            p.speedX = Math.max(p.speedX * 1.8, 5.0); // Extreme reverse sweep!
+            p.speedX = Math.max(p.speedX * 1.8, 5.0); // Strong Collector sweep
           } else if (state.operationalState === 'cutoff') {
             p.speedX = -Math.abs(p.speedX);
           } else if (state.operationalState === 'saturation') {
-            p.speedX = (Math.random() - 0.5) * 0.5 + 0.35; // sweep collapsed
+            p.speedX = (Math.random() - 0.5) * 0.5 + 0.35; 
           }
         }
       }
@@ -492,17 +616,19 @@
         if (p.x > bcJ - 5 && state.operationalState !== 'saturation') p.speedX = -Math.abs(p.speedX);
       }
 
-      // Metal boundary sweeps & immediate reinforcements
+      // Metal boundary sweeps & closed-loop wire carrier feedback
       // Emitter Metal (Left Edge)
       if (p.x <= leftElectrode) {
         if (p.type === 'electron') {
           p.speedX = Math.abs(p.speedX); // rebound
         } else {
-          // Hole leaves system via Emitter contact
+          // Hole collected at emitter contact
           removeParticle(p);
           triggerMetalFlash('left');
-          // Replenish base hole dynamically
-          injectCarrier('hole', (ebJ + bcJ)/2, 'B');
+          if (state.operationalState !== 'cutoff') {
+            // Hole destruction is balanced by injecting an electron at the base contact
+            spawnBjtBaseWireElectron(baseX, 250);
+          }
         }
       }
 
@@ -512,23 +638,20 @@
           // Swept out! Electronic current flow complete
           removeParticle(p);
           triggerMetalFlash('right');
-          // Replenish Emitter with new free electron to maintain systemic charge
-          injectCarrier('electron', leftElectrode + 15, 'E');
+          if (state.operationalState === 'active' || state.operationalState === 'saturation') {
+            // Electron goes into collector loop and flows back to emitter
+            spawnBjtCollectorWireElectron(rightElectrode, p.y);
+          }
         } else {
           p.speedX = -Math.abs(p.speedX);
         }
-      }
-
-      // Base Metal (Bottom Interface: P-region bottom x: ebJ to bcJ)
-      if (p.type === 'hole' && p.y >= 315) {
-        p.speedY = -Math.abs(p.speedY); // bounce back
       }
 
       keepStrictlyInside(p);
     }
 
     // ----------------------------------------------------
-    // LIFETIME LIFECYCLE CONTROLLERS
+    // LIFETIME LIFECYCLE CONTROLLERS & HOOKS
     // ----------------------------------------------------
     function triggerRecombinationLifetime(p1, p2) {
       p1.isRecombining = true;
@@ -543,13 +666,12 @@
       return particles.find(p => p.type === type && !p.isRecombining && Math.hypot(p.x - x, p.y - y) < radius);
     }
 
+    // Manual injecting helper
     function injectCarrier(type, xCoord, region) {
-      totalInjections++;
-      document.getElementById('stat-injections').innerText = totalInjections;
       particles.push(new Carrier(
         type,
         xCoord,
-        Math.random() * 240 + 60,
+        Math.random() * (SEMI_H - 40) + SEMI_Y + 20,
         type === 'electron' ? (Math.random() * 0.5 + 0.3) : (Math.random() - 0.5) * 0.4,
         (Math.random() - 0.5) * 0.4,
         region
@@ -568,40 +690,59 @@
     }
 
     function keepStrictlyInside(p) {
-      if (p.y < 42 || p.y > 318) {
+      if (p.y < SEMI_Y + 2 || p.y > SEMI_Y + SEMI_H - 2) {
         p.speedY = -p.speedY;
       }
     }
-
 
     // ----------------------------------------------------
     // DATA BINDINGS & TEXT PRESETS
     // ----------------------------------------------------
     const DIODE_STATES = [
-      { id: 'unbiased', name: '⚖️ 平衡狀態 (未導通)', desc: '無外加電壓。當電子與電洞擴散並複合時，空乏區殘留的正負離子（施體/受體）形成了強固的自建電場，迫使想要再跨越的載子折返，最後達成微觀動態平衡。' },
-      { id: 'forward', name: '📈 順向偏壓 (大導通)', desc: '外加電壓削弱了自建能障，空乏區幾近坍塌。左側金屬極和右側金屬極開始劇烈補充電子與電洞，電子成功湧入並形成極大的正向電流流通！' },
-      { id: 'reverse', name: '📉 逆向偏壓 (截止中)', desc: '外加電壓與自建電場同向，將自由電子與電洞拉得更開，空乏區急遽變寬，能障極高。金屬接觸極此時停止注入多數載子，電流完全歸零。' }
+      { id: 'unbiased', name: '⚖️ 平衡狀態 (未導通)', desc: '無外加電壓。當電子與電洞擴散並複合時，空乏區殘留的正負離子（施體/受體）形成了強固的自建電場，迫使想要再跨越的載子折返，最後達成微觀動態平衡。外部導線無電荷流動。' },
+      { id: 'forward', name: '📈 順向偏壓 (大導通)', desc: '外加電壓削弱了自建能障，空乏區幾近坍塌。左側金屬極和右側金屬極開始劇烈補充電子與電洞，導線電子從電池負極出發，源源不絕注入N型區！' },
+      { id: 'reverse', name: '📉 逆向偏壓 (截止中)', desc: '外加電壓與自建電場同向，將自由電子與電洞拉得更開，空乏區急遽變寬，能障極高。金屬接觸極與外部導線停止注入多數載子，電流歸零。' }
     ];
 
     const BJT_STATES = [
-      { id: 'cutoff', name: '📴 截止區', desc: '雙接面均為逆偏。位能障壁厚，左側射極金屬電極雖然富含電子，但完全被阻絕在阻壁之外，無法跨入基極。' },
-      { id: 'active', name: '📈 放大區 (最精妙)', desc: 'BE接面順偏使得電子大量湧入，BC接面逆偏提供高達 10V 以上的強抽吸電場。基極接觸電極（P-Contact）在此時提供微量電洞補給。99% 的電子在經歷壽命極限前直接衝進集極！' },
-      { id: 'saturation', name: '⚡ 飽和區', desc: '雙接面皆處於順偏，集極的吸力場崩塌，兩端接觸極均朝著薄薄的基極瘋狂輸送電子，造成基極中塞滿了電子。複合量大增，電流被外阻卡死。' }
+      { id: 'cutoff', name: '📴 截止區', desc: '雙接面均為逆偏。位能障壁厚，左側射極金屬電極雖然富含電子，但完全被阻絕在阻壁之外，導線無電子流動。' },
+      { id: 'active', name: '📈 放大區 (最精妙)', desc: 'BE接面順偏使得電子大量湧入，BC接面逆偏提供強大吸力電場。99% 的電子被集極吸入，通過導線流過 V_CC；而 1% 複合電子流過 V_BB。射極接收這兩股電子合流，完美體現 KCL！' },
+      { id: 'saturation', name: '⚡ 飽和區', desc: '雙接面皆處於順偏，集極的吸力場崩塌，兩端接觸極均朝著薄薄的基極瘋狂輸送電子，造成基極中塞滿了電子。導線流動受外阻卡死。' }
     ];
 
     const DIODE_STEPS = [
       { id: 1, title: "1. 濃度擴散運動", text: "P型(高密度電洞)與N型(高密度電子)接觸瞬間，載子利用熱能進行高難度擴散，越過交界面企圖去對面尋求結合。" },
-      { id: 2, title: "2. 複合徘徊壽命", text: "跨越過去的電子與電洞並非瞬間湮滅。它們會維持一小段「複合壽命時間(τ_n)」，化為泛紅光的激發徘徊態，最終完成正負消融。" },
-      { id: 3, title: "3. 電極守恆補充", text: "一旦有電子複合消失或流出，左、右金屬電極（灰色層）會因為電荷守恆，立刻同步補充電子與電洞進去電路！" },
+      { id: 2, title: "2. 複合與載子壽命", text: "跨越過去的電子與電洞並非瞬間湮滅。它們會維持一小段「複合壽命時間(τ_n)」，化為泛紅光的激發徘徊態，最終完成正負消融。" },
+      { id: 3, title: "3. 電池與導線補充", text: "一旦有電子複合消失或流出，外部導線中的電子在電池偏壓下，會由右側接觸電極立刻注入補充，左側流出電子，形成完整的閉合迴路！" },
       { id: 4, title: "4. 能障形成平衡", text: "空乏區中無法移動的施體(+)與受體(-)離子建立了由右至左的「自建電場」，阻擋多數載子繼續前往，達成微觀平衡。" }
     ];
 
     const BJT_STEPS = [
-      { id: 1, title: "1. 射極注入 & 電極供給", text: "左側射極(E)接觸電極源源不絕注入大量自由電子，這股電子潮越過窄障壁，大量注入基極(B)。" },
+      { id: 1, title: "1. 射極注入 & 電極供給", text: "外部雙電源負極導線匯合，注入大量自由電子至射極。這股電子潮越過窄障壁，大量注入基極(B)。" },
       { id: 2, title: "2. 基極極薄擴散過程", text: "電子進入極窄的P型基極。由於基極寬度極小，電子大部分時間是利用濃度差「橫向擴散」穿過。" },
-      { id: 3, title: "3. 基極徘徊複合", text: "基極摻雜低且薄，電子僅約 1% 機率與基極電洞發生「徘徊複合」並消融，此時基極電極(底部)會注入電洞補充(I_B)。" },
-      { id: 4, title: "4. 集極逆向高速抽吸", text: "BC接面的強烈偏壓形成瀑布般的吸力電場。將沒被複合、存活擴散到 JC 邊界的 99% 電子瞬間拉入集極(C)吸走，由右電極輸出。" }
+      { id: 3, title: "3. 基極迴路複合", text: "基極僅約 1% 機率發生複合，此時基極電極(底部)會流出電子，經由 V_BB 導線流回發射極以維持中性。這形成了基極電流 I_B。" },
+      { id: 4, title: "4. 集極迴路強抽吸", text: "99% 的電子擴散到 JC 邊界被逆偏電場拉入集極(C)吸走，通過 V_CC 導線高速流回發射極，形成了強大的集極電流 I_C。" }
     ];
+
+    // ----------------------------------------------------
+    // HIGH-DPI CANVAS SCALING FUNCTION (Eliminates Blur)
+    // ----------------------------------------------------
+    function scaleCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      
+      // We keep a 550x360 base coordinate grid
+      const targetWidth = 550;
+      const targetHeight = 360;
+      
+      // Set physical pixels size to DPR multiplied
+      canvas.width = targetWidth * dpr;
+      canvas.height = targetHeight * dpr;
+      
+      // Reset transformations and scale coordinate grid
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+    }
 
     // ----------------------------------------------------
     // INTERACTION HANDLERS & LIFECYCLES
@@ -645,7 +786,7 @@
         btn.id = `op-state-${s.id}`;
         let activeClass = s.id === state.operationalState ? 
           "bg-blue-600 text-white border-blue-500 shadow-md" : 
-          "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200";
+          "bg-slate-950 text-slate-400 border-slate-800 hover:text-white";
         btn.className = `px-4 py-2 rounded-xl text-xs font-bold border transition-all duration-150 ${activeClass}`;
         btn.innerHTML = s.name;
         btn.onclick = () => setOperationalState(s.id);
@@ -659,7 +800,6 @@
       state.operationalState = id;
       rebuildStateSelectors();
       
-      // Step focus align
       if (currentComponent === 'diode') {
         if (id === 'forward') selectStep(3);
         else selectStep(1);
@@ -761,16 +901,17 @@
 
     function initParticles() {
       particles = [];
-      const numEle = state.nd * 22;
-      const numHole = state.na * 20;
+      wireElectrons = [];
+      const numEle = state.nd * 20;
+      const numHole = state.na * 18;
 
       if (currentComponent === 'diode') {
         // P-type Left, N-type Right
         for (let i = 0; i < numHole; i++) {
-          particles.push(new Carrier('hole', Math.random() * 210 + 40, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'P'));
+          particles.push(new Carrier('hole', Math.random() * 210 + 40, Math.random() * (SEMI_H - 40) + SEMI_Y + 20, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'P'));
         }
         for (let i = 0; i < numEle; i++) {
-          particles.push(new Carrier('electron', Math.random() * 210 + 290, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'N'));
+          particles.push(new Carrier('electron', Math.random() * 210 + 290, Math.random() * (SEMI_H - 40) + SEMI_Y + 20, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'N'));
         }
       } else {
         // BJT NPN
@@ -778,36 +919,39 @@
         let bcJ = 240 + (state.wb * 25);
 
         // Emitter
-        const emitterE = numEle * 1.5;
+        const emitterE = numEle * 1.4;
         for (let i = 0; i < emitterE; i++) {
-          particles.push(new Carrier('electron', Math.random() * (ebJ - 50) + 40, Math.random() * 250 + 55, (Math.random() * 0.4 + 0.2), (Math.random() - 0.5) * 0.4, 'E'));
+          particles.push(new Carrier('electron', Math.random() * (ebJ - 50) + 40, Math.random() * (SEMI_H - 40) + SEMI_Y + 20, (Math.random() * 0.4 + 0.2), (Math.random() - 0.5) * 0.4, 'E'));
         }
         // Base
         const baseH = Math.max(6, numHole * 0.45);
         for (let i = 0; i < baseH; i++) {
-          particles.push(new Carrier('hole', Math.random() * (bcJ - ebJ - 15) + ebJ + 10, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25, 'B'));
+          particles.push(new Carrier('hole', Math.random() * (bcJ - ebJ - 15) + ebJ + 10, Math.random() * (SEMI_H - 40) + SEMI_Y + 20, (Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25, 'B'));
         }
         // Collector
         for (let i = 0; i < numEle; i++) {
-          particles.push(new Carrier('electron', Math.random() * (500 - bcJ) + bcJ + 10, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'C'));
+          particles.push(new Carrier('electron', Math.random() * (500 - bcJ) + bcJ + 10, Math.random() * (SEMI_H - 40) + SEMI_Y + 20, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'C'));
         }
       }
     }
 
-
     // ----------------------------------------------------
-    // RENDERING & SIMULATION LOOP
+    // RENDERING & CIRCUITS DRAW
     // ----------------------------------------------------
     function animate() {
       ctx.fillStyle = 'rgba(2, 6, 23, 0.24)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, 550, 360);
 
       drawRegions();
       drawDepletionZone();
       drawMetalElectrodeBlocks();
+      
+      // Draw External Battery and Wire Schemes
+      drawExternalCircuitSchematics();
 
       // Core particle engine
       updateParticlesPhysics();
+      updateWireParticlesPhysics();
 
       // UI Indicators
       drawTeachingOverlays();
@@ -824,32 +968,32 @@
         const midX = 275;
         // P-type (left)
         ctx.fillStyle = 'rgba(45, 27, 105, 0.3)';
-        ctx.fillRect(30, 40, midX - 30, 280);
+        ctx.fillRect(30, SEMI_Y, midX - 30, SEMI_H);
         // N-type (right)
         ctx.fillStyle = 'rgba(30, 41, 59, 0.35)';
-        ctx.fillRect(midX, 40, 490 - midX, 280);
+        ctx.fillRect(midX, SEMI_Y, 490 - midX, SEMI_H);
 
         ctx.font = 'bold 11px "Noto Sans TC"';
-        ctx.fillStyle = '#a78bfa'; ctx.fillText('P 型半導體', 45, 60);
-        ctx.fillStyle = '#64748b'; ctx.fillText('N 型半導體', 320, 60);
+        ctx.fillStyle = '#a78bfa'; ctx.fillText('P 型半導體', 45, SEMI_Y + 20);
+        ctx.fillStyle = '#64748b'; ctx.fillText('N 型半導體', 320, SEMI_Y + 20);
       } else {
         let ebJ = 180;
         let bcJ = 240 + (state.wb * 25);
 
         // Emitter
         ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
-        ctx.fillRect(30, 40, ebJ - 30, 280);
+        ctx.fillRect(30, SEMI_Y, ebJ - 30, SEMI_H);
         // Base
         ctx.fillStyle = 'rgba(45, 27, 105, 0.35)';
-        ctx.fillRect(ebJ, 40, bcJ - ebJ, 280);
+        ctx.fillRect(ebJ, SEMI_Y, bcJ - ebJ, SEMI_H);
         // Collector
         ctx.fillStyle = 'rgba(15, 32, 67, 0.4)';
-        ctx.fillRect(bcJ, 40, 490 - bcJ, 280);
+        ctx.fillRect(bcJ, SEMI_Y, 490 - bcJ, SEMI_H);
 
         ctx.font = 'bold 11px "Noto Sans TC"';
-        ctx.fillStyle = '#10b981'; ctx.fillText('射極 E (N⁺)', 40, 60);
-        ctx.fillStyle = '#a78bfa'; ctx.fillText('基極 B (P)', ebJ + 5, 60);
-        ctx.fillStyle = '#60a5fa'; ctx.fillText('集極 C (N)', bcJ + 15, 60);
+        ctx.fillStyle = '#10b981'; ctx.fillText('射極 E (N⁺)', 40, SEMI_Y + 20);
+        ctx.fillStyle = '#a78bfa'; ctx.fillText('基極 B (P)', ebJ + 5, SEMI_Y + 20);
+        ctx.fillStyle = '#60a5fa'; ctx.fillText('集極 C (N)', bcJ + 15, SEMI_Y + 20);
       }
     }
 
@@ -861,7 +1005,7 @@
         if (state.operationalState === 'reverse') width = 72;
 
         ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
-        ctx.fillRect(midX - width, 40, width * 2, 280);
+        ctx.fillRect(midX - width, SEMI_Y, width * 2, SEMI_H);
       } else {
         let ebJ = 180;
         let bcJ = 240 + (state.wb * 25);
@@ -873,61 +1017,209 @@
         else if (state.operationalState === 'saturation') { jeW = 3; jcW = 3; }
 
         ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
-        ctx.fillRect(ebJ - jeW, 40, jeW * 2, 280);
-        ctx.fillRect(bcJ - jcW, 40, jcW * 2, 280);
+        ctx.fillRect(ebJ - jeW, SEMI_Y, jeW * 2, SEMI_H);
+        ctx.fillRect(bcJ - jcW, SEMI_Y, jcW * 2, SEMI_H);
       }
     }
 
     function drawMetalElectrodeBlocks() {
       ctx.save();
       
-      // Left metal contact plate (Emitter / P Contact)
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(10, 40, 20, 280);
+      // Setup text shadow to make font extremely sharp and stand out against background
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
+
+      // 1. LEFT METALLIC CONTACT (Emitter / P Contact) - 24px wide for better visibility
+      let leftGrad = ctx.createLinearGradient(10, SEMI_Y, 34, SEMI_Y);
+      leftGrad.addColorStop(0, '#334155');
+      leftGrad.addColorStop(0.4, '#94a3b8');
+      leftGrad.addColorStop(0.7, '#cbd5e1');
+      leftGrad.addColorStop(1, '#1e293b');
       
-      // Right metal contact plate (Collector / N Contact)
-      ctx.fillRect(520, 40, 20, 280);
+      ctx.fillStyle = leftGrad;
+      ctx.fillRect(10, SEMI_Y, 24, SEMI_H);
+      
+      // Left electrode border
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(10, SEMI_Y, 24, SEMI_H);
 
-      // Labeling Contacts
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.save();
-      ctx.translate(22, 180);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText("左接觸電極", -25, 0);
-      ctx.restore();
+      // 2. RIGHT METALLIC CONTACT (Collector / N Contact)
+      let rightGrad = ctx.createLinearGradient(516, SEMI_Y, 540, SEMI_Y);
+      rightGrad.addColorStop(0, '#334155');
+      rightGrad.addColorStop(0.4, '#94a3b8');
+      rightGrad.addColorStop(0.7, '#cbd5e1');
+      rightGrad.addColorStop(1, '#1e293b');
 
-      ctx.save();
-      ctx.translate(532, 180);
-      ctx.rotate(Math.PI / 2);
-      ctx.fillText("右接觸電極", -25, 0);
-      ctx.restore();
+      ctx.fillStyle = rightGrad;
+      ctx.fillRect(516, SEMI_Y, 24, SEMI_H);
+      
+      ctx.strokeStyle = '#475569';
+      ctx.strokeRect(516, SEMI_Y, 24, SEMI_H);
+
+      // 3. HORIZONTAL CRISP LABELS (No vertical rotated blur!)
+      ctx.font = 'bold 11px "Noto Sans TC"';
+      ctx.fillStyle = '#f1f5f9'; // Slate 100
+      ctx.textAlign = 'center';
+
+      // Draw horizontal indicator text above or within boundaries
+      ctx.fillText("左電極", 22, SEMI_Y - 8);
+      ctx.fillText("右電極", 528, SEMI_Y - 8);
 
       // BJT Bottom base contact
       if (currentComponent === 'bjt') {
         let ebJ = 180;
         let bcJ = 240 + (state.wb * 25);
-        ctx.fillStyle = '#475569';
-        ctx.fillRect(ebJ, 320, bcJ - ebJ, 10);
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillText("基極金屬接觸極 (I_B補給)", ebJ - 20, 342);
+        let bWidth = bcJ - ebJ;
+        
+        let bottomGrad = ctx.createLinearGradient(ebJ, SEMI_Y + SEMI_H, ebJ, SEMI_Y + SEMI_H + 10);
+        bottomGrad.addColorStop(0, '#cbd5e1');
+        bottomGrad.addColorStop(0.5, '#475569');
+        bottomGrad.addColorStop(1, '#0f172a');
+
+        ctx.fillStyle = bottomGrad;
+        ctx.fillRect(ebJ, SEMI_Y + SEMI_H, bWidth, 10);
+        
+        ctx.strokeStyle = '#475569';
+        ctx.strokeRect(ebJ, SEMI_Y + SEMI_H, bWidth, 10);
+
+        ctx.fillText("基極電極", (ebJ + bcJ) / 2, SEMI_Y + SEMI_H + 22);
       }
 
       ctx.restore();
     }
 
+    // ----------------------------------------------------
+    // EXTERNAL WIRES & BATTERIES SCHEMATICS
+    // ----------------------------------------------------
+    function drawExternalCircuitSchematics() {
+      ctx.save();
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2.5;
+
+      if (currentComponent === 'diode') {
+        // Draw Diode single loop: Left electro to wire, right electro to wire
+        // Battery in middle bottom (275, 300)
+        ctx.beginPath();
+        // Left wire
+        ctx.moveTo(22, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(15, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(15, 300);
+        ctx.lineTo(240, 300);
+        ctx.stroke();
+
+        // Right wire
+        ctx.beginPath();
+        ctx.moveTo(528, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(535, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(535, 300);
+        ctx.lineTo(310, 300);
+        ctx.stroke();
+
+        // Draw battery symbol V_bias
+        drawBatterySymbol(275, 300, 30, state.operationalState === 'reverse', "V_bias");
+
+      } else {
+        // BJT double loop circuit layout:
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+        const baseX = (ebJ + bcJ) / 2;
+
+        // Emitter Wire (Common ground on the left)
+        ctx.beginPath();
+        ctx.moveTo(22, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(15, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(15, 310);
+        ctx.lineTo(265, 310); // goes to V_CC negative
+        ctx.stroke();
+
+        // Base Wire splits at common ground at 280
+        ctx.beginPath();
+        ctx.moveTo(15, 280);
+        ctx.lineTo(125, 280); // goes to V_BB negative
+        ctx.stroke();
+
+        // Base electrode down to V_BB battery
+        ctx.beginPath();
+        ctx.moveTo(baseX, SEMI_Y + SEMI_H + 5);
+        ctx.lineTo(baseX, 280);
+        ctx.lineTo(185, 280); // goes to V_BB positive
+        ctx.stroke();
+
+        // Collector Wire down to V_CC battery
+        ctx.beginPath();
+        ctx.moveTo(528, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(535, SEMI_Y + SEMI_H / 2);
+        ctx.lineTo(535, 310);
+        ctx.lineTo(335, 310); // goes to V_CC positive
+        ctx.stroke();
+
+        // Draw batteries:
+        // V_BB (Base bias) at (155, 280)
+        drawBatterySymbol(155, 280, 25, false, "V_BB");
+
+        // V_CC (Collector bias) at (300, 310)
+        drawBatterySymbol(300, 310, 25, false, "V_CC");
+      }
+
+      ctx.restore();
+    }
+
+    function drawBatterySymbol(x, y, size, isFlipped, label) {
+      ctx.save();
+      ctx.strokeStyle = '#60a5fa'; // Blue neon battery
+      ctx.lineWidth = 3;
+
+      // Draw plates: long plate (+) and short thick plate (-)
+      let longX = isFlipped ? x + 10 : x - 10;
+      let shortX = isFlipped ? x - 10 : x + 10;
+
+      // Long plate (+)
+      ctx.beginPath();
+      ctx.moveTo(longX, y - size / 2);
+      ctx.lineTo(longX, y + size / 2);
+      ctx.stroke();
+
+      // Short plate (-)
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(shortX, y - size / 3);
+      ctx.lineTo(shortX, y + size / 3);
+      ctx.stroke();
+
+      // Labels
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(label, x - 12, y - size / 2 - 5);
+
+      // Sign markers (+ / -)
+      ctx.fillText(isFlipped ? "-" : "+", longX - 3, y - size / 2 - 2);
+      ctx.fillText(isFlipped ? "+" : "-", shortX - 3, y - size / 3 - 2);
+
+      ctx.restore();
+    }
+
+    // ----------------------------------------------------
+    // UPDATING CARRIERS
+    // ----------------------------------------------------
     function updateParticlesPhysics() {
       // Loop backward
       for (let i = particles.length - 1; i >= 0; i--) {
         let p = particles[i];
         p.update();
         
-        // Handle active recombination lifespan decay
         if (p.isRecombining) {
-          // Check if lifetime has reached threshold
-          // Corresponds to (state.lifetime * 8) ticks
           if (p.recombinationTimer >= state.lifetime * 8) {
-            // Officially annihilated!
+            // Recombination consumes 1 electron + 1 hole.
+            // If BJT, Base contact has to feed new charge to maintain neutrality (spawn Base wire feedback electron)
+            if (currentComponent === 'bjt' && p.type === 'electron') {
+              let ebJ = 180;
+              let bcJ = 240 + (state.wb * 25);
+              spawnBjtBaseWireElectron((ebJ + bcJ) / 2, SEMI_Y + SEMI_H);
+            }
             removeParticle(p);
             continue;
           }
@@ -937,6 +1229,21 @@
       }
     }
 
+    function updateWireParticlesPhysics() {
+      for (let i = wireElectrons.length - 1; i >= 0; i--) {
+        const we = wireElectrons[i];
+        const active = we.update();
+        if (!active) {
+          wireElectrons.splice(i, 1);
+        } else {
+          we.draw(ctx);
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // TEACHING OVERLAYS & ACTIONS
+    // ----------------------------------------------------
     function drawTeachingOverlays() {
       ctx.save();
       const pulse = Math.sin(Date.now() / 150) * 0.15 + 0.35;
@@ -946,15 +1253,14 @@
           case 1: // Diffusion
             ctx.strokeStyle = `rgba(52, 211, 153, ${pulse})`;
             ctx.lineWidth = 3;
-            ctx.strokeRect(180, 45, 190, 270);
-            drawVectorArrow(310, 160, 240, 160, '#34d399');
-            drawVectorArrow(240, 210, 310, 210, '#fbbf24');
+            ctx.strokeRect(180, SEMI_Y + 5, 190, SEMI_H - 10);
+            drawVectorArrow(310, SEMI_Y + SEMI_H/2 - 20, 240, SEMI_Y + SEMI_H/2 - 20, '#34d399');
+            drawVectorArrow(240, SEMI_Y + SEMI_H/2 + 20, 310, SEMI_Y + SEMI_H/2 + 20, '#fbbf24');
             break;
 
           case 2: // Recombination lifetime
             ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
             ctx.lineWidth = 3;
-            // Highlight recombining nodes
             particles.forEach(p => {
               if (p.isRecombining) {
                 ctx.beginPath();
@@ -964,19 +1270,19 @@
             });
             break;
 
-          case 3: // Electrode supply
+          case 3: // Electrode supply / battery
             ctx.strokeStyle = `rgba(59, 130, 246, ${pulse})`;
             ctx.lineWidth = 4;
-            // Highlight metal boundaries
-            ctx.strokeRect(10, 38, 22, 284);
-            ctx.strokeRect(518, 38, 22, 284);
+            // Highlight metal boundaries and wires
+            ctx.strokeRect(10, SEMI_Y - 2, 24, SEMI_H + 4);
+            ctx.strokeRect(516, SEMI_Y - 2, 24, SEMI_H + 4);
             break;
 
           case 4: // Barrier and field
             ctx.strokeStyle = `rgba(251, 191, 36, ${pulse})`;
             ctx.lineWidth = 3;
-            ctx.strokeRect(240, 42, 70, 276);
-            drawVectorArrow(300, 180, 250, 180, '#fbbf24');
+            ctx.strokeRect(240, SEMI_Y + 2, 70, SEMI_H - 4);
+            drawVectorArrow(300, SEMI_Y + SEMI_H/2, 250, SEMI_Y + SEMI_H/2, '#fbbf24');
             break;
         }
       } else {
@@ -987,25 +1293,25 @@
           case 1: // Injection
             ctx.strokeStyle = `rgba(52, 211, 153, ${pulse})`;
             ctx.lineWidth = 3.5;
-            ctx.strokeRect(10, 42, ebJ + 5, 276);
+            ctx.strokeRect(10, SEMI_Y - 2, ebJ + 5, SEMI_H + 4);
             break;
 
           case 2: // Base diffusion
             ctx.strokeStyle = `rgba(167, 139, 250, ${pulse})`;
             ctx.lineWidth = 3.5;
-            ctx.strokeRect(ebJ, 42, bcJ - ebJ, 276);
+            ctx.strokeRect(ebJ, SEMI_Y - 2, bcJ - ebJ, SEMI_H + 4);
             break;
 
           case 3: // Recombination
             ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
             ctx.lineWidth = 3.5;
-            ctx.strokeRect(ebJ, 42, bcJ - ebJ, 276);
+            ctx.strokeRect(ebJ, SEMI_Y - 2, bcJ - ebJ, SEMI_H + 4);
             break;
 
           case 4: // Sweep collection
             ctx.strokeStyle = `rgba(59, 130, 246, ${pulse})`;
             ctx.lineWidth = 3.5;
-            ctx.strokeRect(bcJ - 10, 42, 120, 276);
+            ctx.strokeRect(bcJ - 10, SEMI_Y - 2, 120, SEMI_H + 4);
             break;
         }
       }
@@ -1014,22 +1320,21 @@
     }
 
     function drawFlashes() {
-      // Draw neon flash overlay when metal contact injects or sweeps
       if (leftContactFlash > 0) {
         ctx.fillStyle = `rgba(52, 211, 153, ${leftContactFlash / 10 * 0.4})`;
-        ctx.fillRect(10, 40, 20, 280);
+        ctx.fillRect(10, SEMI_Y, 24, SEMI_H);
         leftContactFlash--;
       }
       if (rightContactFlash > 0) {
         ctx.fillStyle = `rgba(59, 130, 246, ${rightContactFlash / 10 * 0.4})`;
-        ctx.fillRect(520, 40, 20, 280);
+        ctx.fillRect(516, SEMI_Y, 24, SEMI_H);
         rightContactFlash--;
       }
       if (baseContactFlash > 0) {
         ctx.fillStyle = `rgba(251, 191, 36, ${baseContactFlash / 10 * 0.4})`;
         let ebJ = 180;
         let bcJ = 240 + (state.wb * 25);
-        ctx.fillRect(ebJ, 320, bcJ - ebJ, 10);
+        ctx.fillRect(ebJ, SEMI_Y + SEMI_H, bcJ - ebJ, 10);
         baseContactFlash--;
       }
     }
@@ -1051,8 +1356,14 @@
     // START UP
     // ----------------------------------------------------
     window.onload = function() {
-      canvas.width = 550;
-      canvas.height = 360;
+      // 1. Initial scale setup for retina screen crispness
+      scaleCanvas();
+      
+      // 2. Bind screen resize to dynamically keep retina resolution on any device
+      window.addEventListener('resize', () => {
+        scaleCanvas();
+      });
+
       switchComponent('diode');
       animate();
     };
