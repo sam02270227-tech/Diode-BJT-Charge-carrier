@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二極體與 BJT 微觀載子物理模擬器 (含電極補給與載子壽命)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+    }
+    .code-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    /* Step active highlight */
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(59, 130, 246, 0.4); }
+      50% { border-color: rgba(59, 130, 246, 1); }
+    }
+    .active-step {
+      animation: pulse-border 1.5s infinite;
+      background-color: rgba(30, 41, 59, 0.8) !important;
+      border-color: #3b82f6 !important;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col overflow-x-hidden">
+
+  <!-- Header -->
+  <header class="bg-slate-900 border-b border-slate-800 py-4 px-6 sticky top-0 z-50 shadow-lg">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-blue-600 text-white p-2.5 rounded-lg shadow-md shadow-blue-900/30">
+          <i class="fa-solid fa-atom text-xl animate-spin" style="animation-duration: 8s;"></i>
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-bold tracking-wider text-white">半導體載子物理與傳輸模擬器</h1>
+          <p class="text-xs text-slate-400">真實模擬：外部電極（金屬接觸端）動態載子補給 & 載子複合壽命（徘徊複合）</p>
+        </div>
+      </div>
+      
+      <!-- Component Switcher -->
+      <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <button id="tab-diode" onclick="switchComponent('diode')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 bg-blue-600 text-white shadow-lg shadow-blue-950/50">
+          <i class="fa-solid fa-play mr-1.5 text-emerald-400"></i>二極體 (Diode)
+        </button>
+        <button id="tab-bjt" onclick="switchComponent('bjt')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 text-slate-400 hover:text-white">
+          <i class="fa-solid fa-gears mr-1.5 text-amber-400"></i>BJT 電晶體
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- Left Panel (8 Columns) -->
+    <section class="lg:col-span-8 flex flex-col gap-6">
+      
+      <!-- Canvas Box -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col relative overflow-hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold text-slate-200 flex items-center gap-2">
+            <i class="fa-solid fa-eye text-blue-400"></i>
+            <span id="canvas-title">二極體微觀載子傳輸</span>
+          </h2>
+          <!-- Legend -->
+          <div class="flex flex-wrap items-center gap-3 text-[11px] bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-sm"></span> 電子</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-sm"></span> 電洞</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm animate-pulse"></span> 徘徊複合中</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 bg-slate-500 inline-block"></span> 金屬接觸端</span>
+          </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="relative bg-slate-950 rounded-xl border border-slate-850 p-1 flex justify-center items-center overflow-hidden">
+          <canvas id="physicsCanvas" class="w-full h-[320px] md:h-[380px] bg-slate-950 block rounded-lg"></canvas>
+          
+          <!-- HUD Left -->
+          <div class="absolute bottom-4 left-4 bg-slate-900/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800 text-xs space-y-1 shadow-lg">
+            <div class="text-slate-400">元件狀態：</div>
+            <div id="state-badge" class="font-bold text-emerald-400 text-xs">平衡狀態</div>
+          </div>
+          
+          <!-- HUD Right -->
+          <div class="absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800 text-xs space-y-1 shadow-lg">
+            <div class="text-slate-400">能障與空乏區：</div>
+            <div id="barrier-badge" class="font-bold text-amber-400 text-xs">中等 (內建平衡)</div>
+          </div>
+        </div>
+
+        <!-- Operational State Selector -->
+        <div class="mt-4 flex flex-wrap gap-2 justify-center" id="state-selectors-container"></div>
+
+        <!-- Dynamic Explanation Box -->
+        <div class="mt-4 p-4 bg-slate-950 rounded-xl border border-slate-850 text-sm text-slate-300 flex items-start gap-3">
+          <div class="bg-blue-950 text-blue-400 p-2 rounded-lg mt-0.5">
+            <i class="fa-solid fa-microchip"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-white mb-1">物理運動動態觀察</h4>
+            <p id="state-desc" class="leading-relaxed text-xs text-slate-300">載入中...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Steps Guide -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <h2 class="text-base font-bold text-slate-200 flex items-center gap-2 mb-4">
+          <i class="fa-solid fa-list-ol text-blue-400"></i>
+          微觀運作順序（步驟引導）
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3" id="steps-buttons-grid"></div>
+
+        <div class="mt-4 p-4 bg-slate-950 border border-slate-850 rounded-xl">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs font-bold text-blue-400 bg-blue-950 border border-blue-900 px-2 py-0.5 rounded">物理機制解說</span>
+            <span id="step-title-display" class="text-sm font-bold text-white">步驟</span>
+          </div>
+          <p id="step-text-display" class="text-xs text-slate-300 leading-relaxed">載入中...</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Panel (4 Columns) -->
+    <section class="lg:col-span-4 flex flex-col gap-6">
+
+      <!-- Realtime Injection / Recombination Stats -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <h2 class="text-base font-bold text-slate-200 flex items-center gap-2 mb-4">
+          <i class="fa-solid fa-chart-bar text-blue-400"></i>
+          微觀動態量測與電荷補給
+        </h2>
+        
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-850 text-center">
+            <span class="text-[10px] text-slate-400 block mb-1">電極注入新電子</span>
+            <span id="stat-injections" class="text-lg font-bold text-emerald-400 code-font">0</span>
+            <span class="text-[10px] text-slate-500 block">顆 (動態補給)</span>
+          </div>
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-850 text-center">
+            <span class="text-[10px] text-slate-400 block mb-1">正在進行複合</span>
+            <span id="stat-recombining" class="text-lg font-bold text-rose-400 code-font">0</span>
+            <span class="text-[10px] text-slate-500 block">對 (徘徊釋能中)</span>
+          </div>
+        </div>
+
+        <div class="p-3 bg-slate-950 rounded-xl border border-slate-850 text-xs text-slate-400 space-y-2">
+          <div class="flex justify-between"><span>左側接觸電極 (P-Contact):</span> <span class="text-amber-400 font-bold" id="left-contact-state">注入電洞中</span></div>
+          <div class="flex justify-between"><span>右側接觸電極 (N-Contact):</span> <span class="text-emerald-400 font-bold" id="right-contact-state">吸入電子中</span></div>
+        </div>
+      </div>
+
+      <!-- Sliders -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col gap-4">
+        <h2 class="text-base font-bold text-slate-200 flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-blue-400"></i>
+          微觀物理參數
+        </h2>
+
+        <!-- Doping N -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs text-slate-300">N區 施體摻雜 (N_D)</label>
+            <span class="text-xs font-bold text-emerald-400 code-font" id="label-nd">中等</span>
+          </div>
+          <input type="range" id="slider-nd" min="1" max="3" value="2" oninput="updateParameters()" class="w-full h-1 bg-slate-800 rounded accent-emerald-500">
+        </div>
+
+        <!-- Doping P -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs text-slate-300">P區 受體摻雜 (N_A)</label>
+            <span class="text-xs font-bold text-amber-400 code-font" id="label-na">中等</span>
+          </div>
+          <input type="range" id="slider-na" min="1" max="3" value="2" oninput="updateParameters()" class="w-full h-1 bg-slate-800 rounded accent-amber-500">
+        </div>
+
+        <!-- Carrier Lifetime (NEW) -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs text-slate-300">載子複合壽命 (τ_n)</label>
+            <span class="text-xs font-bold text-rose-400 code-font" id="label-lifetime">1.5 秒</span>
+          </div>
+          <input type="range" id="slider-lifetime" min="5" max="30" value="15" oninput="updateParameters()" class="w-full h-1 bg-slate-800 rounded accent-rose-500">
+          <span class="text-[10px] text-slate-500">電子在複合前徘徊的壽命。壽命長代表徘徊久。</span>
+        </div>
+
+        <!-- Base Width (BJT Only) -->
+        <div id="container-basewidth" class="hidden">
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs text-slate-300">基極物理寬度 (W_B)</label>
+            <span class="text-xs font-bold text-purple-400 code-font" id="label-wb">極薄</span>
+          </div>
+          <input type="range" id="slider-wb" min="1" max="3" value="1" oninput="updateParameters()" class="w-full h-1 bg-slate-800 rounded accent-purple-500">
+        </div>
+      </div>
+
+      <!-- Physics Textbook Concepts -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col gap-3">
+        <h2 class="text-base font-bold text-slate-200 flex items-center gap-2">
+          <i class="fa-solid fa-graduation-cap text-blue-400"></i>
+          半導體物理核心重點
+        </h2>
+        
+        <div class="space-y-3 text-xs leading-relaxed text-slate-400">
+          <div class="p-3 bg-slate-950 rounded-xl border border-slate-850">
+            <h4 class="font-bold text-slate-200 mb-1">🔋 電荷中性 (Charge Neutrality)</h4>
+            <p>當電子被外加電場抽吸走、或是與電洞複合消失時，半導體內部會瞬間失去中性。此時，**外部金屬接觸端會立刻補充電荷**，以維持材料內部電荷平衡。</p>
+          </div>
+          <div class="p-3 bg-slate-950 rounded-xl border border-slate-850">
+            <h4 class="font-bold text-slate-200 mb-1">⏳ 載子壽命 (Carrier Lifetime)</h4>
+            <p>少數載子進入相反區域後，並非立刻湮滅。它們會先形成**激發態（徘徊、擴散）**，在經過統計上的平均壽命 $\tau_n$ 後，能量釋放完畢才正式與主格電洞複合。</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-slate-900 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-400">
+    <p>© 2026 半導體教材 | 二極體與 BJT 微觀粒子傳輸 & 電極補給機制</p>
+  </footer>
+
+  <script>
+    // ----------------------------------------------------
+    // STATE & CONFIG
+    // ----------------------------------------------------
+    let currentComponent = 'diode';
+    
+    let state = {
+      nd: 2,
+      na: 2,
+      lifetime: 15, // corresponds to 1.5s
+      wb: 1, // base width (BJT)
+      operationalState: 'unbiased',
+      selectedStep: 1,
+    };
+
+    // Tracking stats
+    let totalInjections = 0;
+
+    const canvas = document.getElementById('physicsCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animationFrameId = null;
+
+    // Contact electro flashes
+    let leftContactFlash = 0;
+    let rightContactFlash = 0;
+    let baseContactFlash = 0;
+
+    // ----------------------------------------------------
+    // CARRIER CLASS (With Lifetime state)
+    // ----------------------------------------------------
+    class Carrier {
+      constructor(type, x, y, speedX, speedY, region) {
+        this.type = type; // 'electron' (green) or 'hole' (yellow)
+        this.x = x;
+        this.y = y;
+        this.speedX = speedX;
+        this.speedY = speedY;
+        this.size = type === 'electron' ? 3.5 : 4.5;
+        this.region = region; // Birth region
+        
+        // Recombination States
+        this.isRecombining = false; // Is in "lifetime" phase (hovering/recombining)
+        this.recombinationTimer = 0; // Tick timer for lifetime
+        this.partner = null; // Associated opposite carrier
+      }
+
+      update() {
+        if (this.isRecombining) {
+          // Recombination state: Carriers are locked in a "dance/lifetime spiral"
+          this.recombinationTimer++;
+          
+          // Slow orbital motion to represent energy decay/hovering
+          if (this.partner) {
+            const dx = this.partner.x - this.x;
+            const dy = this.partner.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist > 2) {
+              this.x += (dx / dist) * 0.4;
+              this.y += (dy / dist) * 0.4;
+            }
+          }
+          return; // Skip normal physics when recombining
+        }
+
+        // Normal drift / diffusion physics
+        this.x += this.speedX;
+        this.y += this.speedY;
+
+        if (currentComponent === 'diode') {
+          handleDiodePhysics(this);
+        } else {
+          handleBjtPhysics(this);
+        }
+      }
+
+      draw(ctx) {
+        ctx.save();
+        
+        if (this.isRecombining) {
+          // Draw excited state (recombining aura with red neon pulse)
+          const pulse = Math.abs(Math.sin(this.recombinationTimer * 0.15));
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = '#ef4444';
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size + pulse * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(239, 68, 68, ${0.5 + pulse * 0.5})`;
+          ctx.fill();
+        } else {
+          // Standard carrier draw
+          ctx.shadowBlur = this.type === 'electron' ? 5 : 7;
+          ctx.shadowColor = this.type === 'electron' ? '#34d399' : '#fbbf24';
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.fillStyle = this.type === 'electron' ? '#34d399' : '#fbbf24';
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      }
+    }
+
+    // ----------------------------------------------------
+    // DIODE MICROSCOPIC BOUNDARIES & ELECTRODE FEED
+    // ----------------------------------------------------
+    function handleDiodePhysics(p) {
+      const junctionX = 275;
+      const leftElectrode = 30;  // Metal boundaries (Left and right)
+      const rightElectrode = 520;
+
+      let barrierHalfWidth = 15;
+      if (state.operationalState === 'reverse') barrierHalfWidth = 52;
+      if (state.operationalState === 'forward') barrierHalfWidth = 3;
+
+      const barrierLeft = junctionX - barrierHalfWidth;
+      const barrierRight = junctionX + barrierHalfWidth;
+
+      // Barrier interaction
+      if (p.x > barrierLeft && p.x < barrierRight) {
+        if (state.operationalState === 'unbiased') {
+          // Bounce back majority carriers
+          if (p.type === 'electron' && p.speedX > 0) p.speedX = -p.speedX;
+          if (p.type === 'hole' && p.speedX < 0) p.speedX = -p.speedX;
+        } else if (state.operationalState === 'reverse') {
+          // Strong electric field pulls carriers AWAY towards outer boundaries
+          if (p.type === 'electron' && p.x < junctionX + 45) p.speedX = Math.abs(p.speedX) * 1.6;
+          if (p.type === 'hole' && p.x > junctionX - 45) p.speedX = -Math.abs(p.speedX) * 1.6;
+        }
+      }
+
+      // 1. Recombination check: when carriers deep in opposite territories
+      if (!p.isRecombining) {
+        if (p.type === 'electron' && p.x < barrierLeft) {
+          // Electron in P territory: Look for an un-recombining hole to trigger lifetime
+          let partnerHole = findNearbyUnboundCarrier(p.x, p.y, 'hole', 25);
+          if (partnerHole && Math.random() < 0.08) {
+            triggerRecombinationLifetime(p, partnerHole);
+          }
+        }
+        if (p.type === 'hole' && p.x > barrierRight) {
+          // Hole in N territory
+          let partnerElectron = findNearbyUnboundCarrier(p.x, p.y, 'electron', 25);
+          if (partnerElectron && Math.random() < 0.08) {
+            triggerRecombinationLifetime(p, partnerElectron);
+          }
+        }
+      }
+
+      // 2. Electrode Boundary Sweep & Instant Feed Back
+      // When electron reaches left metal boundary (or hole reaches right metal boundary) -> swept into wire!
+      if (p.x <= leftElectrode) {
+        if (p.type === 'electron') {
+          // Electrons leave the system via Left Metal Electrode
+          removeParticle(p);
+          triggerMetalFlash('left');
+          // Charge Conservation: Feed new electron instantly at the Right Metal Electrode
+          injectCarrier('electron', rightElectrode - 10, 'N');
+        } else {
+          p.speedX = Math.abs(p.speedX); // Hole bounces back inside
+        }
+      }
+
+      if (p.x >= rightElectrode) {
+        if (p.type === 'hole') {
+          // Holes leave the system via Right Metal Electrode
+          removeParticle(p);
+          triggerMetalFlash('right');
+          // Charge Conservation: Feed new hole instantly at the Left Metal Electrode
+          injectCarrier('hole', leftElectrode + 10, 'P');
+        } else {
+          if (state.operationalState === 'forward' && p.type === 'electron') {
+            // Forward biased: electron exits right electrode
+            removeParticle(p);
+            triggerMetalFlash('right');
+            // instantly feed new electron from left electrode
+            injectCarrier('electron', leftElectrode + 15, 'P');
+          } else {
+            p.speedX = -Math.abs(p.speedX);
+          }
+        }
+      }
+
+      keepStrictlyInside(p);
+    }
+
+    // ----------------------------------------------------
+    // BJT MICROSCOPIC BOUNDARIES & ELECTRODE FEED
+    // ----------------------------------------------------
+    function handleBjtPhysics(p) {
+      let ebJ = 180;
+      let bcJ = 240 + (state.wb * 25);
+      
+      const leftElectrode = 30; // Emitter contact
+      const rightElectrode = 520; // Collector contact
+      const baseContactY = 320; // Base contact at bottom of P-region
+
+      let jeB = 10;
+      let jcB = 15;
+      if (state.operationalState === 'cutoff') { jeB = 35; jcB = 40; }
+      else if (state.operationalState === 'active') { jeB = 3; jcB = 28; }
+      else if (state.operationalState === 'saturation') { jeB = 3; jcB = 3; }
+
+      // Normal movement inside regions
+      if (p.type === 'electron') {
+        // E -> B crossing
+        if (p.x > ebJ - 12 && p.x < ebJ + 5) {
+          if (state.operationalState === 'cutoff') {
+            p.speedX = -Math.abs(p.speedX);
+            p.x = ebJ - 13;
+          } else {
+            p.speedX = Math.max(p.speedX, 1.4); // Injection speed boost
+          }
+        }
+
+        // Diffusing inside Base (P-region)
+        if (p.x > ebJ + 5 && p.x < bcJ) {
+          p.speedX = Math.max(p.speedX * 0.98, 0.45); // diffusion damping
+          
+          // Recombination lifetime trigger with base holes
+          if (!p.isRecombining && Math.random() < 0.05) {
+            let partnerHole = findNearbyUnboundCarrier(p.x, p.y, 'hole', 20);
+            if (partnerHole) {
+              triggerRecombinationLifetime(p, partnerHole);
+            }
+          }
+        }
+
+        // B -> C Sweep
+        if (p.x >= bcJ - 10 && p.x <= bcJ + 10) {
+          if (state.operationalState === 'active') {
+            p.speedX = Math.max(p.speedX * 1.8, 5.0); // Extreme reverse sweep!
+          } else if (state.operationalState === 'cutoff') {
+            p.speedX = -Math.abs(p.speedX);
+          } else if (state.operationalState === 'saturation') {
+            p.speedX = (Math.random() - 0.5) * 0.5 + 0.35; // sweep collapsed
+          }
+        }
+      }
+
+      // Holes confinement (Holes stay in Base region)
+      if (p.type === 'hole') {
+        if (p.x < ebJ + 5) p.speedX = Math.abs(p.speedX);
+        if (p.x > bcJ - 5 && state.operationalState !== 'saturation') p.speedX = -Math.abs(p.speedX);
+      }
+
+      // Metal boundary sweeps & immediate reinforcements
+      // Emitter Metal (Left Edge)
+      if (p.x <= leftElectrode) {
+        if (p.type === 'electron') {
+          p.speedX = Math.abs(p.speedX); // rebound
+        } else {
+          // Hole leaves system via Emitter contact
+          removeParticle(p);
+          triggerMetalFlash('left');
+          // Replenish base hole dynamically
+          injectCarrier('hole', (ebJ + bcJ)/2, 'B');
+        }
+      }
+
+      // Collector Metal (Right Edge)
+      if (p.x >= rightElectrode) {
+        if (p.type === 'electron') {
+          // Swept out! Electronic current flow complete
+          removeParticle(p);
+          triggerMetalFlash('right');
+          // Replenish Emitter with new free electron to maintain systemic charge
+          injectCarrier('electron', leftElectrode + 15, 'E');
+        } else {
+          p.speedX = -Math.abs(p.speedX);
+        }
+      }
+
+      // Base Metal (Bottom Interface: P-region bottom x: ebJ to bcJ)
+      if (p.type === 'hole' && p.y >= 315) {
+        p.speedY = -Math.abs(p.speedY); // bounce back
+      }
+
+      keepStrictlyInside(p);
+    }
+
+    // ----------------------------------------------------
+    // LIFETIME LIFECYCLE CONTROLLERS
+    // ----------------------------------------------------
+    function triggerRecombinationLifetime(p1, p2) {
+      p1.isRecombining = true;
+      p2.isRecombining = true;
+      p1.recombinationTimer = 0;
+      p2.recombinationTimer = 0;
+      p1.partner = p2;
+      p2.partner = p1;
+    }
+
+    function findNearbyUnboundCarrier(x, y, type, radius) {
+      return particles.find(p => p.type === type && !p.isRecombining && Math.hypot(p.x - x, p.y - y) < radius);
+    }
+
+    function injectCarrier(type, xCoord, region) {
+      totalInjections++;
+      document.getElementById('stat-injections').innerText = totalInjections;
+      particles.push(new Carrier(
+        type,
+        xCoord,
+        Math.random() * 240 + 60,
+        type === 'electron' ? (Math.random() * 0.5 + 0.3) : (Math.random() - 0.5) * 0.4,
+        (Math.random() - 0.5) * 0.4,
+        region
+      ));
+    }
+
+    function removeParticle(p) {
+      const idx = particles.indexOf(p);
+      if (idx > -1) particles.splice(idx, 1);
+    }
+
+    function triggerMetalFlash(side) {
+      if (side === 'left') leftContactFlash = 10;
+      if (side === 'right') rightContactFlash = 10;
+      if (side === 'base') baseContactFlash = 10;
+    }
+
+    function keepStrictlyInside(p) {
+      if (p.y < 42 || p.y > 318) {
+        p.speedY = -p.speedY;
+      }
+    }
+
+
+    // ----------------------------------------------------
+    // DATA BINDINGS & TEXT PRESETS
+    // ----------------------------------------------------
+    const DIODE_STATES = [
+      { id: 'unbiased', name: '⚖️ 平衡狀態 (未導通)', desc: '無外加電壓。當電子與電洞擴散並複合時，空乏區殘留的正負離子（施體/受體）形成了強固的自建電場，迫使想要再跨越的載子折返，最後達成微觀動態平衡。' },
+      { id: 'forward', name: '📈 順向偏壓 (大導通)', desc: '外加電壓削弱了自建能障，空乏區幾近坍塌。左側金屬極和右側金屬極開始劇烈補充電子與電洞，電子成功湧入並形成極大的正向電流流通！' },
+      { id: 'reverse', name: '📉 逆向偏壓 (截止中)', desc: '外加電壓與自建電場同向，將自由電子與電洞拉得更開，空乏區急遽變寬，能障極高。金屬接觸極此時停止注入多數載子，電流完全歸零。' }
+    ];
+
+    const BJT_STATES = [
+      { id: 'cutoff', name: '📴 截止區', desc: '雙接面均為逆偏。位能障壁厚，左側射極金屬電極雖然富含電子，但完全被阻絕在阻壁之外，無法跨入基極。' },
+      { id: 'active', name: '📈 放大區 (最精妙)', desc: 'BE接面順偏使得電子大量湧入，BC接面逆偏提供高達 10V 以上的強抽吸電場。基極接觸電極（P-Contact）在此時提供微量電洞補給。99% 的電子在經歷壽命極限前直接衝進集極！' },
+      { id: 'saturation', name: '⚡ 飽和區', desc: '雙接面皆處於順偏，集極的吸力場崩塌，兩端接觸極均朝著薄薄的基極瘋狂輸送電子，造成基極中塞滿了電子。複合量大增，電流被外阻卡死。' }
+    ];
+
+    const DIODE_STEPS = [
+      { id: 1, title: "1. 濃度擴散運動", text: "P型(高密度電洞)與N型(高密度電子)接觸瞬間，載子利用熱能進行高難度擴散，越過交界面企圖去對面尋求結合。" },
+      { id: 2, title: "2. 複合徘徊壽命", text: "跨越過去的電子與電洞並非瞬間湮滅。它們會維持一小段「複合壽命時間(τ_n)」，化為泛紅光的激發徘徊態，最終完成正負消融。" },
+      { id: 3, title: "3. 電極守恆補充", text: "一旦有電子複合消失或流出，左、右金屬電極（灰色層）會因為電荷守恆，立刻同步補充電子與電洞進去電路！" },
+      { id: 4, title: "4. 能障形成平衡", text: "空乏區中無法移動的施體(+)與受體(-)離子建立了由右至左的「自建電場」，阻擋多數載子繼續前往，達成微觀平衡。" }
+    ];
+
+    const BJT_STEPS = [
+      { id: 1, title: "1. 射極注入 & 電極供給", text: "左側射極(E)接觸電極源源不絕注入大量自由電子，這股電子潮越過窄障壁，大量注入基極(B)。" },
+      { id: 2, title: "2. 基極極薄擴散過程", text: "電子進入極窄的P型基極。由於基極寬度極小，電子大部分時間是利用濃度差「橫向擴散」穿過。" },
+      { id: 3, title: "3. 基極徘徊複合", text: "基極摻雜低且薄，電子僅約 1% 機率與基極電洞發生「徘徊複合」並消融，此時基極電極(底部)會注入電洞補充(I_B)。" },
+      { id: 4, title: "4. 集極逆向高速抽吸", text: "BC接面的強烈偏壓形成瀑布般的吸力電場。將沒被複合、存活擴散到 JC 邊界的 99% 電子瞬間拉入集極(C)吸走，由右電極輸出。" }
+    ];
+
+    // ----------------------------------------------------
+    // INTERACTION HANDLERS & LIFECYCLES
+    // ----------------------------------------------------
+    function switchComponent(comp) {
+      currentComponent = comp;
+      totalInjections = 0;
+      document.getElementById('stat-injections').innerText = "0";
+
+      const tabDiode = document.getElementById('tab-diode');
+      const tabBjt = document.getElementById('tab-bjt');
+      const baseWidthContainer = document.getElementById('container-basewidth');
+
+      if (comp === 'diode') {
+        tabDiode.className = "px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 bg-blue-600 text-white shadow-lg shadow-blue-950/50";
+        tabBjt.className = "px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 text-slate-400 hover:text-white";
+        document.getElementById('canvas-title').innerText = "二極體 (PN Junction) 微觀載子傳輸";
+        baseWidthContainer.classList.add('hidden');
+        state.operationalState = 'unbiased';
+      } else {
+        tabBjt.className = "px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 bg-blue-600 text-white shadow-lg shadow-blue-950/50";
+        tabDiode.className = "px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 text-slate-400 hover:text-white";
+        document.getElementById('canvas-title').innerText = "BJT 電晶體 (NPN) 微觀載子傳輸";
+        baseWidthContainer.classList.remove('hidden');
+        state.operationalState = 'active';
+      }
+
+      state.selectedStep = 1;
+      rebuildStateSelectors();
+      rebuildStepsGrid();
+      updateParameters();
+    }
+
+    function rebuildStateSelectors() {
+      const container = document.getElementById('state-selectors-container');
+      container.innerHTML = '';
+      const list = currentComponent === 'diode' ? DIODE_STATES : BJT_STATES;
+
+      list.forEach(s => {
+        const btn = document.createElement('button');
+        btn.id = `op-state-${s.id}`;
+        let activeClass = s.id === state.operationalState ? 
+          "bg-blue-600 text-white border-blue-500 shadow-md" : 
+          "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200";
+        btn.className = `px-4 py-2 rounded-xl text-xs font-bold border transition-all duration-150 ${activeClass}`;
+        btn.innerHTML = s.name;
+        btn.onclick = () => setOperationalState(s.id);
+        container.appendChild(btn);
+      });
+
+      updateExplanation();
+    }
+
+    function setOperationalState(id) {
+      state.operationalState = id;
+      rebuildStateSelectors();
+      
+      // Step focus align
+      if (currentComponent === 'diode') {
+        if (id === 'forward') selectStep(3);
+        else selectStep(1);
+      } else {
+        if (id === 'active') selectStep(4);
+        else selectStep(1);
+      }
+
+      initParticles();
+    }
+
+    function updateExplanation() {
+      const list = currentComponent === 'diode' ? DIODE_STATES : BJT_STATES;
+      const cur = list.find(s => s.id === state.operationalState);
+      
+      document.getElementById('state-badge').innerText = cur.name;
+      document.getElementById('state-desc').innerText = cur.desc;
+
+      const barrierBadge = document.getElementById('barrier-badge');
+      if (currentComponent === 'diode') {
+        if (state.operationalState === 'unbiased') {
+          barrierBadge.innerText = "中等 (自建電阻平衡)"; barrierBadge.className = "font-bold text-amber-400 text-xs";
+        } else if (state.operationalState === 'forward') {
+          barrierBadge.innerText = "坍塌 (順向順暢導通)"; barrierBadge.className = "font-bold text-emerald-400 text-xs";
+        } else {
+          barrierBadge.innerText = "變寬 (強固阻止)"; barrierBadge.className = "font-bold text-rose-400 text-xs";
+        }
+      } else {
+        if (state.operationalState === 'cutoff') {
+          barrierBadge.innerText = "全阻斷 (J_E & J_C 厚)"; barrierBadge.className = "font-bold text-rose-400 text-xs";
+        } else if (state.operationalState === 'active') {
+          barrierBadge.innerText = "J_E薄 / J_C厚 (抽吸強)"; barrierBadge.className = "font-bold text-emerald-400 text-xs";
+        } else {
+          barrierBadge.innerText = "雙障壁消失 (塞車狀態)"; barrierBadge.className = "font-bold text-amber-400 text-xs";
+        }
+      }
+    }
+
+    function rebuildStepsGrid() {
+      const grid = document.getElementById('steps-buttons-grid');
+      grid.innerHTML = '';
+      const list = currentComponent === 'diode' ? DIODE_STEPS : BJT_STEPS;
+
+      list.forEach(st => {
+        const btn = document.createElement('button');
+        btn.id = `step-btn-${st.id}`;
+        btn.onclick = () => selectStep(st.id);
+        
+        let stepClass = "text-left p-3.5 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-800/50 transition-all duration-200 group";
+        if (st.id === state.selectedStep) stepClass += " active-step";
+
+        btn.className = stepClass;
+        btn.innerHTML = `
+          <div class="mb-1"><span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-900">步驟 ${st.id}</span></div>
+          <h3 class="text-xs font-bold text-slate-200 group-hover:text-blue-400 transition-colors">${st.title.split(' ')[1]}</h3>
+        `;
+        grid.appendChild(btn);
+      });
+
+      updateStepDisplay();
+    }
+
+    function selectStep(stepId) {
+      state.selectedStep = stepId;
+      const list = currentComponent === 'diode' ? DIODE_STEPS : BJT_STEPS;
+      list.forEach(st => {
+        const btn = document.getElementById(`step-btn-${st.id}`);
+        if (btn) {
+          btn.className = (st.id === stepId) ? 
+            "text-left p-3.5 rounded-xl border border-blue-500 bg-slate-900 hover:bg-slate-800/50 transition-all duration-200 group active-step" : 
+            "text-left p-3.5 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-800/50 transition-all duration-200 group";
+        }
+      });
+      updateStepDisplay();
+    }
+
+    function updateStepDisplay() {
+      const list = currentComponent === 'diode' ? DIODE_STEPS : BJT_STEPS;
+      const cur = list.find(st => st.id === state.selectedStep);
+      if (cur) {
+        document.getElementById('step-title-display').innerText = cur.title;
+        document.getElementById('step-text-display').innerText = cur.text;
+      }
+    }
+
+    function updateParameters() {
+      state.nd = parseInt(document.getElementById('slider-nd').value);
+      state.na = parseInt(document.getElementById('slider-na').value);
+      state.lifetime = parseInt(document.getElementById('slider-lifetime').value);
+      state.wb = parseInt(document.getElementById('slider-wb').value);
+
+      document.getElementById('label-nd').innerText = ["低濃度", "中等", "重摻雜"][state.nd - 1];
+      document.getElementById('label-na').innerText = ["低濃度", "中等", "重摻雜"][state.na - 1];
+      document.getElementById('label-lifetime').innerText = (state.lifetime / 10).toFixed(1) + " 秒";
+      document.getElementById('label-wb').innerText = ["極薄 (99%抽吸)", "中等 (90%抽吸)", "較厚 (65%抽吸)"][state.wb - 1];
+
+      initParticles();
+    }
+
+    function initParticles() {
+      particles = [];
+      const numEle = state.nd * 22;
+      const numHole = state.na * 20;
+
+      if (currentComponent === 'diode') {
+        // P-type Left, N-type Right
+        for (let i = 0; i < numHole; i++) {
+          particles.push(new Carrier('hole', Math.random() * 210 + 40, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'P'));
+        }
+        for (let i = 0; i < numEle; i++) {
+          particles.push(new Carrier('electron', Math.random() * 210 + 290, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'N'));
+        }
+      } else {
+        // BJT NPN
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+
+        // Emitter
+        const emitterE = numEle * 1.5;
+        for (let i = 0; i < emitterE; i++) {
+          particles.push(new Carrier('electron', Math.random() * (ebJ - 50) + 40, Math.random() * 250 + 55, (Math.random() * 0.4 + 0.2), (Math.random() - 0.5) * 0.4, 'E'));
+        }
+        // Base
+        const baseH = Math.max(6, numHole * 0.45);
+        for (let i = 0; i < baseH; i++) {
+          particles.push(new Carrier('hole', Math.random() * (bcJ - ebJ - 15) + ebJ + 10, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25, 'B'));
+        }
+        // Collector
+        for (let i = 0; i < numEle; i++) {
+          particles.push(new Carrier('electron', Math.random() * (500 - bcJ) + bcJ + 10, Math.random() * 250 + 55, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 'C'));
+        }
+      }
+    }
+
+
+    // ----------------------------------------------------
+    // RENDERING & SIMULATION LOOP
+    // ----------------------------------------------------
+    function animate() {
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.24)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawRegions();
+      drawDepletionZone();
+      drawMetalElectrodeBlocks();
+
+      // Core particle engine
+      updateParticlesPhysics();
+
+      // UI Indicators
+      drawTeachingOverlays();
+      drawFlashes();
+
+      // Update Live UI Labels
+      document.getElementById('stat-recombining').innerText = particles.filter(p => p.isRecombining).length / 2;
+
+      animationFrameId = requestAnimationFrame(animate);
+    }
+
+    function drawRegions() {
+      if (currentComponent === 'diode') {
+        const midX = 275;
+        // P-type (left)
+        ctx.fillStyle = 'rgba(45, 27, 105, 0.3)';
+        ctx.fillRect(30, 40, midX - 30, 280);
+        // N-type (right)
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.35)';
+        ctx.fillRect(midX, 40, 490 - midX, 280);
+
+        ctx.font = 'bold 11px "Noto Sans TC"';
+        ctx.fillStyle = '#a78bfa'; ctx.fillText('P 型半導體', 45, 60);
+        ctx.fillStyle = '#64748b'; ctx.fillText('N 型半導體', 320, 60);
+      } else {
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+
+        // Emitter
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+        ctx.fillRect(30, 40, ebJ - 30, 280);
+        // Base
+        ctx.fillStyle = 'rgba(45, 27, 105, 0.35)';
+        ctx.fillRect(ebJ, 40, bcJ - ebJ, 280);
+        // Collector
+        ctx.fillStyle = 'rgba(15, 32, 67, 0.4)';
+        ctx.fillRect(bcJ, 40, 490 - bcJ, 280);
+
+        ctx.font = 'bold 11px "Noto Sans TC"';
+        ctx.fillStyle = '#10b981'; ctx.fillText('射極 E (N⁺)', 40, 60);
+        ctx.fillStyle = '#a78bfa'; ctx.fillText('基極 B (P)', ebJ + 5, 60);
+        ctx.fillStyle = '#60a5fa'; ctx.fillText('集極 C (N)', bcJ + 15, 60);
+      }
+    }
+
+    function drawDepletionZone() {
+      if (currentComponent === 'diode') {
+        const midX = 275;
+        let width = 20;
+        if (state.operationalState === 'forward') width = 4;
+        if (state.operationalState === 'reverse') width = 72;
+
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+        ctx.fillRect(midX - width, 40, width * 2, 280);
+      } else {
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+        let jeW = 10;
+        let jcW = 15;
+
+        if (state.operationalState === 'cutoff') { jeW = 28; jcW = 38; }
+        else if (state.operationalState === 'active') { jeW = 3; jcW = 25; }
+        else if (state.operationalState === 'saturation') { jeW = 3; jcW = 3; }
+
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+        ctx.fillRect(ebJ - jeW, 40, jeW * 2, 280);
+        ctx.fillRect(bcJ - jcW, 40, jcW * 2, 280);
+      }
+    }
+
+    function drawMetalElectrodeBlocks() {
+      ctx.save();
+      
+      // Left metal contact plate (Emitter / P Contact)
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(10, 40, 20, 280);
+      
+      // Right metal contact plate (Collector / N Contact)
+      ctx.fillRect(520, 40, 20, 280);
+
+      // Labeling Contacts
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.save();
+      ctx.translate(22, 180);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText("左接觸電極", -25, 0);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(532, 180);
+      ctx.rotate(Math.PI / 2);
+      ctx.fillText("右接觸電極", -25, 0);
+      ctx.restore();
+
+      // BJT Bottom base contact
+      if (currentComponent === 'bjt') {
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(ebJ, 320, bcJ - ebJ, 10);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText("基極金屬接觸極 (I_B補給)", ebJ - 20, 342);
+      }
+
+      ctx.restore();
+    }
+
+    function updateParticlesPhysics() {
+      // Loop backward
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.update();
+        
+        // Handle active recombination lifespan decay
+        if (p.isRecombining) {
+          // Check if lifetime has reached threshold
+          // Corresponds to (state.lifetime * 8) ticks
+          if (p.recombinationTimer >= state.lifetime * 8) {
+            // Officially annihilated!
+            removeParticle(p);
+            continue;
+          }
+        }
+
+        p.draw(ctx);
+      }
+    }
+
+    function drawTeachingOverlays() {
+      ctx.save();
+      const pulse = Math.sin(Date.now() / 150) * 0.15 + 0.35;
+
+      if (currentComponent === 'diode') {
+        switch (state.selectedStep) {
+          case 1: // Diffusion
+            ctx.strokeStyle = `rgba(52, 211, 153, ${pulse})`;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(180, 45, 190, 270);
+            drawVectorArrow(310, 160, 240, 160, '#34d399');
+            drawVectorArrow(240, 210, 310, 210, '#fbbf24');
+            break;
+
+          case 2: // Recombination lifetime
+            ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
+            ctx.lineWidth = 3;
+            // Highlight recombining nodes
+            particles.forEach(p => {
+              if (p.isRecombining) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+                ctx.stroke();
+              }
+            });
+            break;
+
+          case 3: // Electrode supply
+            ctx.strokeStyle = `rgba(59, 130, 246, ${pulse})`;
+            ctx.lineWidth = 4;
+            // Highlight metal boundaries
+            ctx.strokeRect(10, 38, 22, 284);
+            ctx.strokeRect(518, 38, 22, 284);
+            break;
+
+          case 4: // Barrier and field
+            ctx.strokeStyle = `rgba(251, 191, 36, ${pulse})`;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(240, 42, 70, 276);
+            drawVectorArrow(300, 180, 250, 180, '#fbbf24');
+            break;
+        }
+      } else {
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+
+        switch (state.selectedStep) {
+          case 1: // Injection
+            ctx.strokeStyle = `rgba(52, 211, 153, ${pulse})`;
+            ctx.lineWidth = 3.5;
+            ctx.strokeRect(10, 42, ebJ + 5, 276);
+            break;
+
+          case 2: // Base diffusion
+            ctx.strokeStyle = `rgba(167, 139, 250, ${pulse})`;
+            ctx.lineWidth = 3.5;
+            ctx.strokeRect(ebJ, 42, bcJ - ebJ, 276);
+            break;
+
+          case 3: // Recombination
+            ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
+            ctx.lineWidth = 3.5;
+            ctx.strokeRect(ebJ, 42, bcJ - ebJ, 276);
+            break;
+
+          case 4: // Sweep collection
+            ctx.strokeStyle = `rgba(59, 130, 246, ${pulse})`;
+            ctx.lineWidth = 3.5;
+            ctx.strokeRect(bcJ - 10, 42, 120, 276);
+            break;
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function drawFlashes() {
+      // Draw neon flash overlay when metal contact injects or sweeps
+      if (leftContactFlash > 0) {
+        ctx.fillStyle = `rgba(52, 211, 153, ${leftContactFlash / 10 * 0.4})`;
+        ctx.fillRect(10, 40, 20, 280);
+        leftContactFlash--;
+      }
+      if (rightContactFlash > 0) {
+        ctx.fillStyle = `rgba(59, 130, 246, ${rightContactFlash / 10 * 0.4})`;
+        ctx.fillRect(520, 40, 20, 280);
+        rightContactFlash--;
+      }
+      if (baseContactFlash > 0) {
+        ctx.fillStyle = `rgba(251, 191, 36, ${baseContactFlash / 10 * 0.4})`;
+        let ebJ = 180;
+        let bcJ = 240 + (state.wb * 25);
+        ctx.fillRect(ebJ, 320, bcJ - ebJ, 10);
+        baseContactFlash--;
+      }
+    }
+
+    function drawVectorArrow(x1, y1, x2, y2, color) {
+      ctx.save();
+      ctx.strokeStyle = color; ctx.fillStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      ctx.beginPath(); ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - 8 * Math.cos(ang - Math.PI/6), y2 - 8 * Math.sin(ang - Math.PI/6));
+      ctx.lineTo(x2 - 8 * Math.cos(ang + Math.PI/6), y2 - 8 * Math.sin(ang + Math.PI/6));
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    // ----------------------------------------------------
+    // START UP
+    // ----------------------------------------------------
+    window.onload = function() {
+      canvas.width = 550;
+      canvas.height = 360;
+      switchComponent('diode');
+      animate();
+    };
+  </script>
+</body>
+</html>
